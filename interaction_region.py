@@ -69,49 +69,77 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
         tri = []  # Surfaces
         c2c = []  # edges that connect cell centers
 
+        surface_node_type = []
+        surface_is_boundary = []
+        edge_node_type = []
+
         # The faces of the interaction region are now formed by the connecting
         # one cell center with two consequtive nodes in the face-node map.
         # This assumes a circular ordering of the face-node relation.
         for ci in cells:
             if g.dim == 2:
                 tri.append((ci, nodes[0]))
+                surface_node_type.append(("cell", "node"))
+                surface_is_boundary.append(False)
+
                 tri.append((ci, nodes[1]))
+                surface_node_type.append(("cell", "node"))
+                surface_is_boundary.append(False)
             else:
                 for ni in range(nodes.size):
                     # The face of the interaction region consists of one cell
                     # and two nodes, in that order.
                     tri.append((ci, nodes_extended[ni], nodes_extended[ni + 1]))
-                # To further keep track of which lines are 1d boundary lines use
-                # segment_connected_to_cell_center = (True, False, True)
+                    surface_node_type.append(("cell", "node", "node"))
+                    surface_is_boundary.append(False)
 
         for n in nodes:
             if on_boundary:
                 c2c.append((cells[0], n))
+                edge_node_type.append(("cell", "node"))
             else:
                 c2c.append((cells[0], n, cells[1]))
+                edge_node_type.append(("cell", "node", "cell"))
+
+        if on_boundary:
+            if g.dim == 2:
+                tri.append(nodes)
+                surface_node_type.append(("node", "node"))
+                surface_is_boundary.append(True)
+            else:
+                if nodes.size == 3:
+                    tri.append(nodes)
+                    surface_node_type.append(("node", "node", "node"))
+                    surface_is_boundary.append(True)
+                elif nodes.size == 4:
+                    tri.append(nodes[:3])
+                    surface_node_type.append(("node", "node", "node"))
+                    surface_is_boundary.append(True)
+
+                    tri.append((nodes[0], nodes[2], nodes[3]))
+                    surface_node_type.append(("node", "node", "node"))
+                    surface_is_boundary.append(True)
+                else:
+                    raise ValueError(
+                        "Implementation only covers simplexes and Cartisan grids"
+                    )
 
         # Combine the full set of boundary faces of this interaction region
         # into an np.array, and store it in the global list
         surfaces = np.vstack([t for t in tri])
 
         edges = np.vstack([c for c in c2c])
-        if on_boundary:
-            region_edge_node_type = ("cell", "node")
-        else:
-            region_edge_node_type = ("cell", "node", "cell")
 
         reg = InteractionRegion()
         reg.surfaces = surfaces
 
         # Which type of grid element the boundaries of the interaction regions are
         # formed by. Needed for lookup of geometry (the first index refers to cell center etc.)
-        if g.dim == 2:
-            reg.surface_node_type = ("cell", "node")
-        else:
-            reg.surface_node_type = ("cell", "node", "node")
+        reg.surface_node_type = surface_node_type
+        reg.surface_is_boundary = surface_is_boundary
 
         reg.edges = edges
-        reg.edge_node_type = region_edge_node_type
+        reg.edge_node_type = edge_node_type
 
         region_list.append(reg)
 
@@ -120,7 +148,7 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
 
 
 def extract_mpfa_regions(g: pp.Grid, nodes=None):
-    
+
     if g.dim < 2:
         raise ValueError("Implementation is only valid for 2d and 3d")
 
@@ -158,7 +186,7 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         edge_node_type = []
         if g.dim == 2:
             tmp_surfaces = []
-            
+
         else:
             tmp_surfaces = []
             other_node, face_of_edge = _find_edges(g, loc_faces, ni)
@@ -168,7 +196,7 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
             if np.any(cell_faces[:, fi] < 0):
                 boundary_face = True
                 # This is a boundary face
-                edge_node_type.append(('cell', 'face'))
+                edge_node_type.append(("cell", "face"))
                 if cell_faces[0, fi] < 0:
                     ci = cell_faces[1, fi]
                 else:
@@ -177,29 +205,26 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
             else:
                 boundary_face = False
                 tmp_edges.append(np.array([cell_faces[0, fi], fi, cell_faces[1, fi]]))
-                edge_node_type.append(('cell', 'face', 'cell'))
-                
+                edge_node_type.append(("cell", "face", "cell"))
+
             if g.dim == 2:
                 if boundary_face:
                     tmp_surfaces.append(np.array([ci, fi]))
                 else:
                     tmp_surfaces.append((cell_faces[0, fi], fi))
                     tmp_surfaces.append((cell_faces[1, fi], fi))
-                    
+
             else:  # g.dim == 3
                 edge_ind_this_face = other_node[face_of_edge == fi]
-                
+
                 if boundary_face:
                     ci = np.array([ci])
                 else:
                     ci = cell_faces[:, fi]
-                    
+
                 for ei in edge_ind_this_face:
                     for c in ci:
                         tmp_surfaces.append((c, fi, ei))
-                    
-                
-                
 
         # Bounding edges of the interaction region
         edges = np.array(tmp_edges)
@@ -210,44 +235,41 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         reg.surface_node_type = ("cell", "face")
         reg.edges = edges
         reg.surfaces = surfaces
-        
+
         reg.edge_node_type = edge_node_type
-    
+
         region_list.append(reg)
 
     return region_list
 
+
 def _find_edges(g, loc_faces, central_node):
-    
+
     fn_loc = g.face_nodes[:, loc_faces]
     node_ind = fn_loc.indices
     fn_ptr = fn_loc.indptr
-    
+
     if not np.unique(np.diff(fn_ptr)).size == 1:
         ValueError("Have not implemented grids with varying number of face-nodes")
-        
+
     num_fn = np.unique(np.diff(fn_ptr))[0]
-    
+
     sort_ind = np.argsort(node_ind)
     sorted_node_ind = node_ind[sort_ind]
-    
-    face_ind = np.tile(loc_faces, (num_fn, 1)).ravel(order='f')
+
+    face_ind = np.tile(loc_faces, (num_fn, 1)).ravel(order="f")
     sorted_face_ind = face_ind[sort_ind]
-    
+
     not_central_node = np.where(sorted_node_ind != central_node)[0]
-    
+
     sorted_node_ind_ext = sorted_node_ind[not_central_node]
     sorted_face_ind_ext = sorted_face_ind[not_central_node]
-    
-    
+
     multiple_occur = np.where(np.bincount(sorted_node_ind_ext) > 1)[0]
-    
+
     hit = np.in1d(sorted_node_ind_ext, multiple_occur)
-    
+
     nodes_on_edges = sorted_node_ind_ext[hit]
     face_of_edges = sorted_face_ind_ext[hit]
-    
+
     return nodes_on_edges, face_of_edges
-    
-    
-    
