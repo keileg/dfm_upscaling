@@ -351,6 +351,12 @@ class TestRegions(unittest.TestCase):
             test_utils.compare_arrays_varying_size(known_edges.T, reg.edges.T)
         )
 
+    def test_regions_different_grids(self):
+        # Run through all prepared simple grids, check that the creation does not break
+        for g in create_grids.create_grids():
+            _ = ia_reg.extract_tpfa_regions(g)
+            _ = ia_reg.extract_mpfa_regions(g)
+
 
 class TestFindEdges(unittest.TestCase):
     def test_cart_grid_3d_internal(self):
@@ -363,5 +369,5 @@ class TestFindEdges(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    TestRegions().test_mpfa_cart_grid_2d_boundary_node()
+    TestRegions().test_regions_different_grids()
     unittest.main()
