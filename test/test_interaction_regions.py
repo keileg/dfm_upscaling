@@ -191,16 +191,14 @@ class TestRegions(unittest.TestCase):
         g = create_grids.cart_2d()
 
         interior_node = 3
-        # cells = [0, 2]
-        # faces = [0, 3, 11]
+        cells = [0, 2]
+        faces = [0, 3, 11]
 
         reg = ia_reg.extract_mpfa_regions(g, interior_node)[0]
 
         known_edges = np.array([[0, 0], [0, 11, 2], [2, 3]])
-        # what to do with boundary surfaces? Must be included as surface, should be marked
-        # so that they are not assigned a local problem, but form neumann conditions for the final problem
 
-        known_surfaces = np.array([[0, 0], [0, 11], [2, 11], [2, 3]])
+        known_surfaces = np.array([[0, 0], [0, 11], [2, 11], [2, 3], [0, 3], [3, 3]])
 
         self.assertTrue(test_utils.compare_arrays(known_surfaces.T, reg.surfaces.T))
         self.assertTrue(
@@ -212,6 +210,19 @@ class TestRegions(unittest.TestCase):
                 self.assertTrue(reg.edge_node_type[i] == ("cell", "face"))
             if len(reg.edges[i]) == 3:
                 self.assertTrue(reg.edge_node_type[i] == ("cell", "face", "cell"))
+
+        for surf, bound_info, node_types in zip(
+            reg.surfaces, reg.surface_is_boundary, reg.surface_node_type
+        ):
+            if "node" in node_types:
+                # This is a boundary surface
+                self.assertTrue(bound_info == True)
+                self.assertTrue(node_types == ("face", "node"))
+                self.assertTrue(surf[-1] == interior_node)
+                self.assertTrue(np.any(surf[0] == faces))
+            else:
+                self.assertTrue(bound_info == False)
+                self.assertTrue(node_types == ("cell", "face"))
 
     def test_mpfa_cart_grid_3d_internal_node(self):
 
@@ -324,7 +335,15 @@ class TestRegions(unittest.TestCase):
                 [2, 14, 12],
                 [2, 3, 12],
                 [2, 3, 6],
-                [2, 26, 6],
+                [2, 26, 6],  # after this, boundary surfaces
+                [0, 0, 3],
+                [0, 12, 3],
+                [3, 6, 3],
+                [3, 12, 3],
+                [24, 0, 3],
+                [24, 4, 3],
+                [26, 4, 3],
+                [26, 6, 3],
             ]
         )
         self.assertTrue(test_utils.compare_arrays(known_surfaces.T, reg.surfaces.T))
@@ -344,5 +363,5 @@ class TestFindEdges(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    TestRegions().test_tpfa_cart_grid_3d_boundary_face()
+    TestRegions().test_mpfa_cart_grid_2d_boundary_node()
     unittest.main()

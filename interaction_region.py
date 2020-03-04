@@ -184,6 +184,9 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
 
         tmp_edges = []
         edge_node_type = []
+        surface_node_type = []
+        surface_is_boundary = []
+
         if g.dim == 2:
             tmp_surfaces = []
 
@@ -210,9 +213,22 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
             if g.dim == 2:
                 if boundary_face:
                     tmp_surfaces.append(np.array([ci, fi]))
+                    surface_node_type.append(("cell", "face"))
+                    surface_is_boundary.append(False)
+
+                    # Add another surface from this face to the central node
+                    tmp_surfaces.append(np.array([fi, ni]))
+                    surface_node_type.append(("face", "node"))
+                    surface_is_boundary.append(True)
+
                 else:
                     tmp_surfaces.append((cell_faces[0, fi], fi))
+                    surface_node_type.append(("cell", "face"))
+                    surface_is_boundary.append(False)
+
                     tmp_surfaces.append((cell_faces[1, fi], fi))
+                    surface_node_type.append(("cell", "face"))
+                    surface_is_boundary.append(False)
 
             else:  # g.dim == 3
                 edge_ind_this_face = other_node[face_of_edge == fi]
@@ -225,6 +241,13 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                 for ei in edge_ind_this_face:
                     for c in ci:
                         tmp_surfaces.append((c, fi, ei))
+                        surface_node_type.append(("cell", "face", "edge"))
+                        surface_is_boundary.append(False)
+
+                    if boundary_face:
+                        tmp_surfaces.append((fi, ei, ni))
+                        surface_node_type.append(("face", "edge", "node"))
+                        surface_is_boundary.append(True)
 
         # Bounding edges of the interaction region
         edges = np.array(tmp_edges)
@@ -237,6 +260,8 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         reg.surfaces = surfaces
 
         reg.edge_node_type = edge_node_type
+        reg.surface_is_boundary = surface_is_boundary
+        reg.surface_node_type = surface_node_type
 
         region_list.append(reg)
 
