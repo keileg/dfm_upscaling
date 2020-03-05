@@ -12,11 +12,127 @@ import pdb
 
 
 class InteractionRegion:
-    def __init__(self, g: pp.Grid, name: str):
+    def __init__(self, g: pp.Grid, name: str, reg_ind: int, central_node=None):
         self.g = g
         self.dim = g.dim
         self.name = name
-        pass
+
+        self.reg_ind = reg_ind
+
+        if central_node is not None:
+            self.node_ind = central_node
+            self.node_coord = g.nodes[:, central_node].reshape((-1, 1))
+
+    def mesh(self):
+        if self.dim == 2:
+            self._mesh_2d()
+        else:
+            self._mesh_3d()
+
+    def _mesh_2d(self):
+        """ To create a local grid bucket in 2d, we should:
+            1) Create the bounding surfaces, from self.surfaces
+                i) Find coordinates of all surfaces
+                ii) Remove duplicate nodes
+                iii) Create a FractureNetwork2d object, create a mesh
+
+        """
+        
+        # First, build points and edges for the domain boundary
+        pts = np.empty((3, 0))
+        edges = np.empty((2, 0), dtype=np.int)
+        edge_2_surf = np.empty([], dtype=np.int)
+
+        for surf_ind, (surf, node_type) in enumerate(
+            zip(self.surfaces, self.surface_node_type)
+        ):
+
+            e = np.vstack(
+                (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
+            )
+            # The new edges are offset by the number of previous points
+            edges = np.hstack((edges, pts.shape[1] + e))
+
+            # Then add new points
+            for ind, node in zip(surf, node_type):
+                pts = np.hstack((pts, self._coord(node, ind)))
+
+            edge_2_surf = np.hstack((edge_2_surf, surf_ind + np.ones(e.shape[1])))
+
+        # Next, build up the constraints
+        # Todo: Expand this with fractures contained within the region
+        edge_2_constraint = np.array([], dtype=np.int)
+        constraint_edges = np.empty((2, 0), dtype=np.int)
+        constraint_pts = np.empty((3, 0))
+
+        for constraint_ind, (constraint, node_type) in enumerate(
+            zip(self.constraints, self.constraint_node_type)
+        ):
+            e = np.vstack(
+                (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
+            )
+            # The new edges are offset by the number of previous points
+            constraint_edges = np.hstack((constraint_edges, constraint_pts.shape[1] + e))
+            # Then add new points
+            for ind, node in zip(constraint, node_type):
+                constraint_pts = np.hstack((constraint_pts, self._coord(node, ind)))
+
+            edge_2_constraint = np.hstack(
+                (
+                    edge_2_constraint,
+                    constraint_ind * np.ones(e.shape[1], dtype=np.int),
+                )
+            )
+
+        # Uniquify points on the domain boundary
+        unique_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(pts)
+        unique_edges = all_2_unique[edges]
+        # Also sort the boundary points to form a circle
+        sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(unique_edges)
+
+        # Similarly uniquify points in constraint description
+        unique_c_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(constraint_pts)
+        unique_c_edges = a2u[constraint_edges]
+
+        # Define a fracture network, using the surface specification as boundary,
+        # and the constraints as points
+        # Fractures will be added as edges
+        network = pp.FractureNetwork2d(domain=unique_pts[:self.dim, sorted_edges[0]],
+                                       pts=unique_c_pts[:self.dim], 
+                                       edges=unique_c_edges)
+
+        mesh_args = {
+            "mesh_size_frac": 0.5,
+            "mesh_size_bound": 0.5,
+            "mesh_size_min": 0.3,
+        }
+
+        file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
+        
+        gb = network.mesh(
+            mesh_args=mesh_args, file_name=file_name, constraints=edge_2_constraint
+        )
+
+        return gb, file_name
+
+    def _mesh_3d(self):
+
+        pts = np.empty((3, 0))
+        boundaries = []
+
+    def _coord(self, node: str, ind: int):
+        if node == "cell":
+            p = self.g.cell_centers[:, ind].reshape((-1, 1))
+        elif node == "face":
+            p = self.g.face_centers[:, ind].reshape((-1, 1))
+        elif node == "node":
+            p = self.g.nodes[:, ind].reshape((-1, 1))
+        elif node == "edge":
+            p = 0.5 * (self.g.nodes[:, ind].reshape((-1, 1)) + self.node_coord)
+        else:
+            raise ValueError("Unknown node type " + node)
+
+        return p
 
 
 def extract_tpfa_regions(g: pp.Grid, faces=None):
@@ -133,7 +249,7 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
 
         edges = np.vstack([c for c in c2c])
 
-        reg = InteractionRegion(g, 'tpfa')
+        reg = InteractionRegion(g, "tpfa", fi)
         reg.surfaces = surfaces
 
         # Which type of grid element the boundaries of the interaction regions are
@@ -143,6 +259,9 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
 
         reg.edges = edges
         reg.edge_node_type = edge_node_type
+
+        reg.constraints = [nodes]
+        reg.constraint_node_type = [nodes.size * ["node"]]
 
         region_list.append(reg)
 
@@ -190,6 +309,9 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         surface_node_type = []
         surface_is_boundary = []
 
+        constraints = []
+        constraints_node_type = []
+
         if g.dim == 2:
             tmp_surfaces = []
 
@@ -224,6 +346,9 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                     surface_node_type.append(("face", "node"))
                     surface_is_boundary.append(True)
 
+                    # No need to append constraints for the boundary, this will be
+                    # represented in the local grid anyhow
+
                 else:
                     tmp_surfaces.append((cell_faces[0, fi], fi))
                     surface_node_type.append(("cell", "face"))
@@ -232,6 +357,10 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                     tmp_surfaces.append((cell_faces[1, fi], fi))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
+
+                    # This half-face should form a constraint for the meshing
+                    constraints.append((fi, ni))
+                    constraints_node_type.append(("face", "node"))
 
             else:  # g.dim == 3
                 edge_ind_this_face = other_node[face_of_edge == fi]
@@ -248,15 +377,24 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                         surface_is_boundary.append(False)
 
                     if boundary_face:
+                        # This face also is part of the local boundary
                         tmp_surfaces.append((fi, ei, ni))
                         surface_node_type.append(("face", "edge", "node"))
                         surface_is_boundary.append(True)
+
+                    else:
+                        # If this is not a boundary, the face must still be explicitly
+                        # resolved in the mesh
+                        constraints.append((fi, ei, ni))
+                        constraints_node_type.append(("face", "edge", "node"))
+
+            # End of loop over faces
 
         # Bounding edges of the interaction region
         edges = np.array(tmp_edges)
         surfaces = np.array(tmp_surfaces)
 
-        reg = InteractionRegion(g, 'mpfa')
+        reg = InteractionRegion(g, "mpfa", ni)
 
         reg.surface_node_type = ("cell", "face")
         reg.edges = edges
@@ -265,6 +403,9 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         reg.edge_node_type = edge_node_type
         reg.surface_is_boundary = surface_is_boundary
         reg.surface_node_type = surface_node_type
+
+        reg.constraints = constraints
+        reg.constraint_node_type = constraints_node_type
 
         region_list.append(reg)
 
