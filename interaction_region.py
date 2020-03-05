@@ -37,7 +37,7 @@ class InteractionRegion:
                 iii) Create a FractureNetwork2d object, create a mesh
 
         """
-        
+
         # First, build points and edges for the domain boundary
         pts = np.empty((3, 0))
         edges = np.empty((2, 0), dtype=np.int)
@@ -72,16 +72,15 @@ class InteractionRegion:
                 (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
             )
             # The new edges are offset by the number of previous points
-            constraint_edges = np.hstack((constraint_edges, constraint_pts.shape[1] + e))
+            constraint_edges = np.hstack(
+                (constraint_edges, constraint_pts.shape[1] + e)
+            )
             # Then add new points
             for ind, node in zip(constraint, node_type):
                 constraint_pts = np.hstack((constraint_pts, self._coord(node, ind)))
 
             edge_2_constraint = np.hstack(
-                (
-                    edge_2_constraint,
-                    constraint_ind * np.ones(e.shape[1], dtype=np.int),
-                )
+                (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=np.int))
             )
 
         # Uniquify points on the domain boundary
@@ -97,9 +96,11 @@ class InteractionRegion:
         # Define a fracture network, using the surface specification as boundary,
         # and the constraints as points
         # Fractures will be added as edges
-        network = pp.FractureNetwork2d(domain=unique_pts[:self.dim, sorted_edges[0]],
-                                       pts=unique_c_pts[:self.dim], 
-                                       edges=unique_c_edges)
+        network = pp.FractureNetwork2d(
+            domain=unique_pts[: self.dim, sorted_edges[0]],
+            pts=unique_c_pts[: self.dim],
+            edges=unique_c_edges,
+        )
 
         mesh_args = {
             "mesh_size_frac": 0.5,
@@ -108,7 +109,7 @@ class InteractionRegion:
         }
 
         file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
-        
+
         gb = network.mesh(
             mesh_args=mesh_args, file_name=file_name, constraints=edge_2_constraint
         )
@@ -260,8 +261,12 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
         reg.edges = edges
         reg.edge_node_type = edge_node_type
 
-        reg.constraints = [nodes]
-        reg.constraint_node_type = [nodes.size * ["node"]]
+        if on_boundary:
+            reg.constraints = []
+            reg.constraint_node_type = []
+        else:
+            reg.constraints = [nodes]
+            reg.constraint_node_type = [nodes.size * ["node"]]
 
         region_list.append(reg)
 
