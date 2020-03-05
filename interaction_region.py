@@ -12,7 +12,10 @@ import pdb
 
 
 class InteractionRegion:
-    def __init__(self):
+    def __init__(self, g: pp.Grid, name: str):
+        self.g = g
+        self.dim = g.dim
+        self.name = name
         pass
 
 
@@ -130,7 +133,7 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
 
         edges = np.vstack([c for c in c2c])
 
-        reg = InteractionRegion()
+        reg = InteractionRegion(g, 'tpfa')
         reg.surfaces = surfaces
 
         # Which type of grid element the boundaries of the interaction regions are
@@ -253,7 +256,7 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         edges = np.array(tmp_edges)
         surfaces = np.array(tmp_surfaces)
 
-        reg = InteractionRegion()
+        reg = InteractionRegion(g, 'mpfa')
 
         reg.surface_node_type = ("cell", "face")
         reg.edges = edges
