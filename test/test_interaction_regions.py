@@ -9,9 +9,9 @@ Created on Tue Mar  3 09:03:51 2020
 import numpy as np
 import unittest
 
-from trm_upscaling_mpfa.utils import create_grids
-from trm_upscaling_mpfa import interaction_region as ia_reg
-from trm_upscaling_mpfa.test import test_utils
+from dfm_upscaling.utils import create_grids
+from dfm_upscaling import interaction_region as ia_reg
+from dfm_upscaling.test import test_utils
 
 
 class TestRegions(unittest.TestCase):
