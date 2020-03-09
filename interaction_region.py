@@ -118,8 +118,48 @@ class InteractionRegion:
 
     def _mesh_3d(self):
 
-        pts = np.empty((3, 0))
         boundaries = []
+        for surf_ind, (surf, node_type) in enumerate(
+            zip(self.surfaces, self.surface_node_type)
+        ):
+            pts = np.empty((3, 0))
+
+            # Then add new points
+            for ind, node in zip(surf, node_type):
+                pts = np.hstack((pts, self._coord(node, ind)))
+
+            boundaries.append(pts)
+
+        constraints = []
+
+        for constraint_ind, (constraint, node_type) in enumerate(
+            zip(self.constraints, self.constraint_node_type)
+        ):
+            pts = np.empty((3, 0))
+            # Then add new points
+            for ind, node in zip(constraint, node_type):
+                pts = np.hstack((pts, self._coord(node, ind)))
+
+            constraints.append(pp.Fracture(pts))
+
+        network = pp.FractureNetwork3d(constraints)
+        network.impose_external_boundary(boundaries)
+
+        mesh_args = {
+            "mesh_size_frac": 0.5,
+            "mesh_size_bound": 0.5,
+            "mesh_size_min": 0.3,
+        }
+
+        file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
+
+        gb = network.mesh(
+            mesh_args=mesh_args,
+            file_name=file_name,
+            constraints=np.arange(len(constraints)),
+        )
+
+        return gb, file_name
 
     def _coord(self, node: str, ind: int):
         if node == "cell":
@@ -399,7 +439,7 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         edges = np.array(tmp_edges)
         surfaces = np.array(tmp_surfaces)
 
-        reg = InteractionRegion(g, "mpfa", ni)
+        reg = InteractionRegion(g, "mpfa", reg_ind=ni, central_node=ni)
 
         reg.surface_node_type = ("cell", "face")
         reg.edges = edges
