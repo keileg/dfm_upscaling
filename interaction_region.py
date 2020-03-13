@@ -109,6 +109,8 @@ class InteractionRegion:
         int_pts = np.hstack((self.fracture_pts, constraint_pts))
         int_edges = np.hstack((self.fracture_edges, constraint_edges))
 
+        edge_2_constraint += self.fracture_edges.shape[1]
+
         # Similarly uniquify points in constraint description
 
         unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts)
