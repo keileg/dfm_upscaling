@@ -19,15 +19,30 @@ class InteractionRegion:
 
         self.reg_ind = reg_ind
 
+        if self.dim == 2:
+            self.pts = np.zeros((2, 0))
+            self.edges = np.zeros((2, 0))
+
+            self.fracture_pts = np.zeros((3, 0))
+            self.fracture_edges = np.zeros((2, 0), dtype=np.int)
+        else:
+            self.fractures = []
+
         if central_node is not None:
             self.node_ind = central_node
             self.node_coord = g.nodes[:, central_node].reshape((-1, 1))
 
+    ####################
+    ## Functions related to meshing of fracture networks
+    ####################
+
     def mesh(self):
+        """ Create a local mesh for this interaction region.
+        """
         if self.dim == 2:
-            self._mesh_2d()
+            return self._mesh_2d()
         else:
-            self._mesh_3d()
+            return self._mesh_3d()
 
     def _mesh_2d(self):
         """ To create a local grid bucket in 2d, we should:
@@ -39,8 +54,8 @@ class InteractionRegion:
         """
 
         # First, build points and edges for the domain boundary
-        pts = np.empty((3, 0))
-        edges = np.empty((2, 0), dtype=np.int)
+        domain_pts = np.zeros((3, 0))
+        domain_edges = np.zeros((2, 0), dtype=np.int)
         edge_2_surf = np.empty([], dtype=np.int)
 
         for surf_ind, (surf, node_type) in enumerate(
@@ -51,11 +66,11 @@ class InteractionRegion:
                 (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
             )
             # The new edges are offset by the number of previous points
-            edges = np.hstack((edges, pts.shape[1] + e))
+            domain_edges = np.hstack((domain_edges, domain_pts.shape[1] + e))
 
             # Then add new points
             for ind, node in zip(surf, node_type):
-                pts = np.hstack((pts, self._coord(node, ind)))
+                domain_pts = np.hstack((domain_pts, self._coord(node, ind)))
 
             edge_2_surf = np.hstack((edge_2_surf, surf_ind + np.ones(e.shape[1])))
 
@@ -84,22 +99,28 @@ class InteractionRegion:
             )
 
         # Uniquify points on the domain boundary
-        unique_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(pts)
-        unique_edges = all_2_unique[edges]
+        unique_domain_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(domain_pts)
+        unique_domain_edges = all_2_unique[domain_edges]
         # Also sort the boundary points to form a circle
-        sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(unique_edges)
+        sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(unique_domain_edges)
+
+        constraint_edges += self.fracture_pts.shape[1]
+
+        int_pts = np.hstack((self.fracture_pts, constraint_pts))
+        int_edges = np.hstack((self.fracture_edges, constraint_edges))
 
         # Similarly uniquify points in constraint description
-        unique_c_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(constraint_pts)
-        unique_c_edges = a2u[constraint_edges]
+
+        unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts)
+        unique_int_edges = a2u[int_edges]
 
         # Define a fracture network, using the surface specification as boundary,
         # and the constraints as points
         # Fractures will be added as edges
         network = pp.FractureNetwork2d(
-            domain=unique_pts[: self.dim, sorted_edges[0]],
-            pts=unique_c_pts[: self.dim],
-            edges=unique_c_edges,
+            domain=unique_domain_pts[: self.dim, sorted_edges[0]],
+            pts=unique_int_pts[: self.dim],
+            edges=unique_int_edges,
         )
 
         mesh_args = {
@@ -114,7 +135,7 @@ class InteractionRegion:
             mesh_args=mesh_args, file_name=file_name, constraints=edge_2_constraint
         )
 
-        return gb, file_name
+        return gb, network, file_name
 
     def _mesh_3d(self):
 
@@ -142,7 +163,11 @@ class InteractionRegion:
 
             constraints.append(pp.Fracture(pts))
 
-        network = pp.FractureNetwork3d(constraints)
+        polygons = self.fractures + constraints
+
+        constraint_inds = len(self.fractures) + np.arange(len(constraints))
+
+        network = pp.FractureNetwork3d(polygons)
         network.impose_external_boundary(boundaries)
 
         mesh_args = {
@@ -156,10 +181,10 @@ class InteractionRegion:
         gb = network.mesh(
             mesh_args=mesh_args,
             file_name=file_name,
-            constraints=np.arange(len(constraints)),
+            constraints=constraint_inds,
         )
 
-        return gb, file_name
+        return gb, network, file_name
 
     def _coord(self, node: str, ind: int):
         if node == "cell":
@@ -174,6 +199,17 @@ class InteractionRegion:
             raise ValueError("Unknown node type " + node)
 
         return p
+
+
+    def add_fractures(self, points=None, edges=None, fractures=None):
+        if self.dim == 3:
+            self.fractures = fractures
+        else:
+            if points.shape[0] == 2:
+                points = np.vstack((points, np.zeros(points.shape[1])))
+            self.fracture_pts = points
+            self.fracture_edges = edges
+
 
 
 def extract_tpfa_regions(g: pp.Grid, faces=None):
@@ -207,8 +243,12 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
     # Get a dense array version of the cell-face map.
     cell_faces = g.cell_face_as_dense()
 
+    # Data structure for the output
     region_list = []
 
+    # The interaction region consists of
+
+    # For TPFA, the interaction regions are centered on the faces in the coarse grid
     # Loop over all specified faces, find their interaction region
     for fi in faces:
 
@@ -218,14 +258,15 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
         # indicates outside the outer boundary - skip these cells.
         cells = cells[cells >= 0]
 
+        # Special marker for boundary cells
         on_boundary = cells.size == 1
 
         # Nodes of the central face
         nodes = g.face_nodes[:, fi].indices
-        # Extend so that we can combine pairs
+        # Extend the nodes so that we can combine pairs
         nodes_extended = np.hstack((nodes, nodes[0]))
 
-        # Storage for this face.
+        # Storage for this interaction regions
         tri = []  # Surfaces
         c2c = []  # edges that connect cell centers
 
