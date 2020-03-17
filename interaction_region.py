@@ -213,6 +213,29 @@ class InteractionRegion:
             self.fracture_pts = points
             self.fracture_edges = edges
 
+    ###### Utility functions
+
+    def bounding_box(self):
+        """
+        Get the bounding box for an interaction region.
+
+        The box is found by taking max and min coordinates over all regions vertexes
+        as defined by grid entities in the parent coarse grid.
+
+        Returns:
+            np.ndarray, size self.dim x 2: First column is minimum coordinates, second
+                is max coordinates
+
+        """
+        min_coord = np.ones((self.dim, 1)) * np.inf
+        max_coord = -np.ones((self.dim, 1)) * np.inf
+
+        for edge, node_type in zip(self.edges, self.edge_node_type):
+            for e, node in zip(edge, node_type):
+                min_coord = np.minimum(min_coord, self._coord(node, e))
+                max_coord = np.maximum(max_coord, self._coord(node, e))
+
+        return np.hstack((min_coord, max_coord))
 
 
 def extract_tpfa_regions(g: pp.Grid, faces=None):
