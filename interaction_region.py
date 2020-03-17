@@ -99,10 +99,14 @@ class InteractionRegion:
             )
 
         # Uniquify points on the domain boundary
-        unique_domain_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(domain_pts)
+        unique_domain_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(
+            domain_pts
+        )
         unique_domain_edges = all_2_unique[domain_edges]
         # Also sort the boundary points to form a circle
-        sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(unique_domain_edges)
+        sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(
+            unique_domain_edges
+        )
 
         constraint_edges += self.fracture_pts.shape[1]
 
@@ -181,9 +185,7 @@ class InteractionRegion:
         file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
-            mesh_args=mesh_args,
-            file_name=file_name,
-            constraints=constraint_inds,
+            mesh_args=mesh_args, file_name=file_name, constraints=constraint_inds
         )
 
         return gb, network, file_name
@@ -201,7 +203,6 @@ class InteractionRegion:
             raise ValueError("Unknown node type " + node)
 
         return p
-
 
     def add_fractures(self, points=None, edges=None, fractures=None):
         if self.dim == 3:
@@ -324,7 +325,7 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
                     surface_is_boundary.append(True)
                 else:
                     raise ValueError(
-                        "Implementation only covers simplexes and Cartisan grids"
+                        "Implementation only covers simplexes and Cartisan coarse grids"
                     )
 
         # Combine the full set of boundary faces of this interaction region
