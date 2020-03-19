@@ -123,7 +123,7 @@ class LocalGridBucketSet:
             # Recover coordinates of the edge points
             ia_edge_coord = np.zeros((3, 0))
             for e, t in zip(ia_edge, node_type):
-                edge_coord = np.hstack((ia_edge_coord, reg._coord(t, e)))
+                ia_edge_coord = np.hstack((ia_edge_coord, reg._coord(t, e)))
 
             # Match points in the region with points in the network
             # It may be possible to recover this information from the network
@@ -132,7 +132,7 @@ class LocalGridBucketSet:
             # contrary to points defined by gmsh)
 
             # Find which of the domain boundary points form the interaction region edge
-            domain_pt_ia_edge = self._match_points(edge_coord, boundary_point_coord)
+            domain_pt_ia_edge = self._match_points(ia_edge_coord, boundary_point_coord)
 
             # We know how many vertexes there should be on an ia_edge
             if node_type[-1] == "cell":
@@ -166,7 +166,9 @@ class LocalGridBucketSet:
             # We differ between this and points introduced by the fracture, as the two
             # types of point grids will be assigned different conditions in the flow
             # problem
-            edge_grids_0d = [domain_point_2_g[domain_pt_ia_edge[1]]]
+            # To get the right grid, first map the midpoint on the ia_edge to the right
+            # boundary point, and then access the dictionary of all boundary point grids
+            edge_grids_0d = [domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]]
 
             # Data structure for storing point grids along the edge that corresponds to
             # fracture grids
@@ -174,7 +176,8 @@ class LocalGridBucketSet:
 
             # Loop over the parts of this edge. This will be one straight line that
             # forms a part of the domain boundary
-            for partial_edge in range(num_ia_edge_vertexes):
+            # There is one ia_edge less than there are ia edge vertexes
+            for partial_edge in range(num_ia_edge_vertexes - 1):
                 # Find the nodes of this edge, in terms of the network decomposition
                 # indices
                 loc_reg_edge = ia_edge_by_network_decomposition[:, partial_edge]
