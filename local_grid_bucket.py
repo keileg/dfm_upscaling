@@ -30,14 +30,203 @@ class LocalGridBucketSet:
 
         if self.dim == 2:
             self._construct_buckets_2d()
+        elif self.dim == 3:
+            self._construct_buckets_3d()
 
     def _construct_buckets_2d(self):
-        gb, network, file_name = reg.mesh()
+
+        gb, network, file_name = self.reg.mesh()
+
+        # for 2d problems, the physical (gmsh) tags can also be used to identify
+        # individual interaction regions (this follows form how the gmsh .geo file) is
+        # set up in gmsh.
+        network.decomposition["edges"] = network.decomposition["edges"][[0, 1, 2, 3, 3]]
+
+        self.buckets_2d = [gb]
+
+        self._recover_line_gb(network, file_name)
+
+    def _construct_buckets_3d(self):
+        gb, network, file_name = self.reg.mesh()
 
         self.buckets_2d = [gb]
 
         decomp = network.decomposition
 
+        edges = decomp["edges"]
+        edge_tags = decomp["edge_tags"]
+
+        def edge_indices(subset, edges):
+            """ Helper function to find a subset of edges in the full edge set
+
+            Parameters:
+                subset (np.array, 2 x n): Edges, defined by their point indices
+                edges (np.array, 2 x n): Full set of edges.
+
+            Raises:
+                ValueError if a column in subset cannot be found in edge
+
+            Returns:
+                ind np.array, size subset.shape[1]: Column indices, so that
+                    subset[:, i] == edges[:, ind[i]], possibly with the rows switched.
+
+            """
+            ns = subset.shape[1]
+
+            ind = []
+
+            for ei in range(ns):
+                upper = np.intersect1d(
+                    np.where(subset[0, ei] == edges[0])[0],
+                    np.where(subset[1, ei] == edges[1])[0],
+                )
+                lower = np.intersect1d(
+                    np.where(subset[1, ei] == edges[0])[0],
+                    np.where(subset[0, ei] == edges[1])[0],
+                )
+
+                hits = np.hstack((upper, lower))
+                if hits.size != 1:
+                    raise ValueError("Could not match subset edge with a single edge")
+                ind.append(hits[0])
+
+            return np.array(ind)
+
+        # To find edges on interaction region edges, we will look for edges on the
+        # network boundary that coincide with edges of the interaction region.
+
+        # Data structure for storing start and endpoints of interaction region edges
+        ia_edge_start, ia_edge_end = [], []
+
+        # Loop over edgen in region, store coordinates
+        for edge, node_type in zip(reg.edges, reg.edge_node_type):
+            coords = np.zeros((3, 0))
+            for e, node in zip(edge, node_type):
+                coords = np.hstack((coords, reg._coord(node, e)))
+
+            # The first n-1 points are start points, the rest are end points
+            for i in range(coords.shape[1] - 1):
+                ia_edge_start.append(coords[:, i])
+                ia_edge_end.append(coords[:, i + 1])
+
+        def ia_edge_for_segment(e):
+            """
+            For an edge, find the interaction region edge which e is part of, that is,
+            e should coincide with the whole, or part of, the ia edge, and no part of e
+            extends outside the region.
+
+            Args:
+                e (np.array, size 2): Index of start and endpoint of the segment.
+
+            Returns:
+                int: Index an interaction region edge which the edge e coincides with.
+                    The index runs over the start and endpoints, given in ia_edge_start
+                    and _end. If no match is found, -1 is returned.
+
+            """
+            # Loop over all edges in the interaction region, look for a match
+            for ei, (start, end) in enumerate(zip(ia_edge_start, ia_edge_end)):
+                # Vectors form the start of the ia edge to the points of this edge
+                v0 = decomp["points"][:, e[0]] - start
+                v1 = decomp["points"][:, e[1]] - start
+
+                v_edge = end - start
+
+                # If any of the points are not on the ia edge, it is not a match
+                # TODO: Sensitivity to the tolerance here is unknown.
+                if (
+                    np.linalg.norm(np.cross(v0, v_edge)) > self.tol
+                    or np.linalg.norm(np.cross(v1, v_edge)) > self.tol
+                ):
+                    continue
+
+                # Both points are on the line. Now check if it is on the line segment
+                dot_0 = v_edge.dot(v0)
+                dot_1 = v_edge.dot(v1)
+                v_edge_nrm = np.linalg.norm(end - start)
+
+                if dot_0 < 0 or dot_1 < 0:
+                    # We are on the wrong side of start
+                    continue
+                elif (
+                    dot_0 > v_edge_nrm ** 2 + self.tol
+                    or dot_1 > v_edge_nrm ** 2 + self.tol
+                ):
+                    # We are on the other side of end
+                    continue
+
+                # It is a match!
+                return ei
+
+            # The segment is on no interaction region edge
+            return -1
+
+        # We will need two sets of edge numberings. First the numbering assigned to the
+        # lines during export to gmsh, which will be translated into g.frac_num during
+        # import of gmsh meshes. This seems to be linear with the ordering of the edges,
+        # but we assign it manually, and set -1 to lines not on the boundary, to uncover
+        # bugs more easily
+        physical_line_counter = -np.ones(edges.shape[1], dtype=np.int)
+        # The second numbering assigns a common index to all lines that form an edge
+        # in the interaction region, and leaves -1s for all other edges
+        ia_reg_edge_numbering = -np.ones(edges.shape[1], dtype=np.int)
+
+        # Loop over polygons in the network
+        for pi, poly in enumerate(decomp["polygons"]):
+            # Only consider the network boundary
+            if not network.tags["boundary"][pi]:
+                continue
+
+            # Get the edge indices for this polygon
+            poly_edge_ind = edge_indices(poly, edges)
+
+            # Loop over
+            for i, ei in enumerate(poly_edge_ind):
+                # If we have treated this edge before, we can continue
+                if ia_reg_edge_numbering[ei] >= 0:
+                    continue
+                # Find the index of the ia segment which this ei coincides
+                ia_edge_ind = ia_edge_for_segment(poly[:, i])
+
+                if ia_edge_ind < 0:
+                    # We found nothing, this edge is not on an interaction region edge
+                    continue
+                else:
+                    # Store the number part of the physical name of this edge
+                    physical_line_counter[ei] = ei
+                    # Assign the ia edge number to this network edge. This will ensure
+                    # that all edges that are on the same ia_edge also have the same
+                    # index
+                    ia_reg_edge_numbering[ei] = ia_edge_ind
+
+        # Sanity check
+        assert np.all(ia_reg_edge_numbering[edge_tags == 1]) >= 0
+
+        network.decomposition["edges"] = np.vstack(
+            (edges, edge_tags, physical_line_counter, ia_reg_edge_numbering)
+        )
+
+        self._recover_line_gb(network, file_name)
+
+    def _recover_line_gb(self, network, file_name):
+        """ We will use the following keys / items in network.decomposition:
+
+            points: Coordinates of all point involved in the description of the network.
+            edges: Connection between lines.
+                First two rows are connections between decomp.points
+                Third row is the type of edge this is, referring to GmshConstant tags.
+                Fourth row is the number part of the physical name that gmsh has
+                    assigned to this grid.
+                Fifth row gives a line index, so that segments that are (or were prior
+                     to splitting) part of the same line have the same index
+            domain_boundary_points: Index, referring to decomp., of points that are
+                part of the domain boundary definition.
+            fracture_boundary_points: Index, referring to decomp., of points that are
+                part of a fracture, and on the domain boundary. Will be formed by the
+                intersection of a fracture and a line that has tag DOMAIN_BOUNDARY_TAG
+
+        """
+        decomp = network.decomposition
         # Recover the full description of the gmsh mesh
         mesh = meshio.read(file_name + ".msh")
 
@@ -70,7 +259,6 @@ class LocalGridBucketSet:
             mesh.cell_data,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_BOUNDARY_POINT,
         )
-
         # Create a mapping from the domain boundary points to the 0d grids
         # The keys are the indexes in the decomposition of the network.
         domain_point_2_g = {}
@@ -106,7 +294,7 @@ class LocalGridBucketSet:
         # Find the index of edges that are associated with the domain boundary. Each
         # part of the boundary may consist of a single line, or several edges that are
         # split either by fractures, or by other auxiliary points.
-        bound_edge_ind = np.unique(decomp["edges"][3][bound_edge])
+        bound_edge_ind = np.unique(decomp["edges"][-1][bound_edge])
 
         # Mapping from the frac_num, which **should** (TODO!) be equivalent to the
         # edge numbering in decomp[edges][3], thus bound_edge_ind, to 1d grids on the
@@ -116,7 +304,6 @@ class LocalGridBucketSet:
         # Data structure for storage of 1d grids
         buckets_1d = []
 
-        # The
         # Loop over the edges in the interaction region
         for ia_edge, node_type in zip(reg.edges, reg.edge_node_type):
 
@@ -186,14 +373,23 @@ class LocalGridBucketSet:
                 # an error
                 found = False
 
-                # Loop over all boundaries in the decomposition. This should have start
-                # and endpoints corresponding to one of the loc_edge_edge, and possible
-                # other points in between.
+                # Loop over all network edges on the boundary, grouped so that edges
+                # that belong to the same ia edge are considered jointly.
+                # The network edge should have start and endpoints corresponding to one
+                # of the loc_edge_edge, and possible other points in between.
                 for bi in bound_edge_ind:
+
+                    if bi < 0:
+                        # This is a line that is on the domain boundary, but not on an
+                        # edge of the interaction region
+                        continue
+
+                    # Network edges that have this edge number
+                    loc_edges = decomp["edges"][-1] == bi
 
                     # edge_components contains the points in the decomposition of the
                     # domain that together form an edge on the domain boundary
-                    edge_components = decomp["edges"][:2, decomp["edges"][3] == bi]
+                    edge_components = decomp["edges"][:2, loc_edges]
                     # Sort the points, to form a line from start to end.
                     sorted_edge_components, _ = pp.utils.sort_points.sort_point_pairs(
                         edge_components, is_circular=False
@@ -222,8 +418,11 @@ class LocalGridBucketSet:
                         # If yes, register this
                         found = True
 
-                        # Add this grid to the set of 1d grids along the region edge
-                        edge_grids_1d.append(bound_edge_ind_2_g[bi])
+                        # Add all grids to the set of 1d grids along the region edge
+                        for ind in np.where(loc_edges)[0]:
+                            edge_grids_1d.append(
+                                bound_edge_ind_2_g[decomp["edges"][-2, ind]]
+                            )
 
                         # Add all 0d grids to the set of 0d grids along the region edge
                         # This will be fracture points, should inherit properties from
@@ -319,22 +518,21 @@ if __name__ == "__main__":
         edges = np.array([[0], [1]])
 
         reg = ia_reg.extract_tpfa_regions(g, faces=[interior_face])[0]
-        reg = ia_reg.extract_mpfa_regions(g, nodes=[interior_face])[0]
+        # reg = ia_reg.extract_mpfa_regions(g, nodes=[interior_face])[0]
         reg.add_fractures(points=p, edges=edges)
 
-        local_buckets = LocalGridBucketSet(2, reg)
+        local_gb = LocalGridBucketSet(2, reg)
+        local_gb.construct_local_buckets()
 
     else:
         g = create_grids.cart_3d()
         reg = ia_reg.extract_tpfa_regions(g, faces=[interior_face])[0]
+        reg = ia_reg.extract_mpfa_regions(g, nodes=[13])[0]
 
         frac = pp.Fracture(
-            np.array([[0.7, 1.3, 1.3, 0.7], [0.5, 0.5, 1.5, 1.5], [0.2, 0.2, 0.8, 0.8]])
+            np.array([[0.7, 1.4, 1.4, 0.7], [0.5, 0.5, 1.4, 1.4], [0.2, 0.2, 0.8, 0.8]])
         )
         reg.add_fractures(fractures=[frac])
 
-        gb, network, file_name = reg.mesh()
-
-        decomp = network.decomposition
-
-        gmsh_constants = GmshConstants()
+        local_gb = LocalGridBucketSet(3, reg)
+        local_gb.construct_local_buckets()
