@@ -424,9 +424,12 @@ class LocalGridBucketSet:
 
                         # Add all grids to the set of 1d grids along the region edge
                         for ind in np.where(loc_edges)[0]:
-                            edge_grids_1d.append(
-                                bound_edge_ind_2_g[decomp["edges"][-2, ind]]
-                            )
+                            g_loc = bound_edge_ind_2_g[decomp["edges"][-2, ind]]
+                            # Add the grid if it is not added before - this is necessary
+                            # because of minor differences in edge tagging between 2d
+                            # and 3d domains
+                            if not g_loc in edge_grids_1d:
+                                edge_grids_1d.append(g_loc)
 
                         # Add all 0d grids to the set of 0d grids along the region edge
                         # This will be fracture points, should inherit properties from
