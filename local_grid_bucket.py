@@ -367,10 +367,11 @@ class LocalGridBucketSet:
             # We know how many vertexes there should be on an ia_edge
             if node_type[-1] == "cell":
                 num_ia_edge_vertexes = 3
+                is_boundary_edge = False
             else:
-                # This should require dropping the last edge, coord, but most other
-                # parts should be the same
-                raise NotImplementedError("Have not considered global boundaries yet")
+                # this is a boundary edge
+                num_ia_edge_vertexes = 2
+                is_boundary_edge = True
 
             # All ia_edge vertexes should be found among the boundary points
             if len(domain_pt_ia_edge) != num_ia_edge_vertexes:
@@ -398,7 +399,10 @@ class LocalGridBucketSet:
             # problem
             # To get the right grid, first map the midpoint on the ia_edge to the right
             # boundary point, and then access the dictionary of all boundary point grids
-            edge_grids_0d = [domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]]
+            if is_boundary_edge:
+                edge_grids_0d = []
+            else:
+                edge_grids_0d = [domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]]
 
             # Data structure for storing point grids along the edge that corresponds to
             # fracture grids
@@ -444,10 +448,11 @@ class LocalGridBucketSet:
                     assert (
                         sorted_edge_components[0, 0] in decomp["domain_boundary_points"]
                     )
-                    assert (
-                        sorted_edge_components[1, -1]
-                        in decomp["domain_boundary_points"]
-                    )
+                    if not is_boundary_edge:
+                        assert (
+                            sorted_edge_components[1, -1]
+                            in decomp["domain_boundary_points"]
+                        )
 
                     # Check if the local interaction region edge have indices coinciding
                     # with this edge on the domain boundary
