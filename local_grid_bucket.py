@@ -276,13 +276,15 @@ class LocalGridBucketSet:
             mesh.cell_data,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
+        fracture_boundary_points = np.where(
+            decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
+        )[0]
+
         # A map from fracture points on the domain boundary to the 0d grids.
         # The keys are the indexes in the decomposition of the network.
         frac_bound_point_2_g = {}
         for g in g_0d_frac_bound:
-            frac_bound_point_2_g[
-                decomp["fracture_boundary_points"][g.physical_name_index]
-            ] = g
+            frac_bound_point_2_g[fracture_boundary_points[g.physical_name_index]] = g
 
         # Get the points that form the boundary of the interaction region
         boundary_point_coord, boundary_point_ind = self._network_boundary_points(
