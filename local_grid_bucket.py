@@ -9,6 +9,7 @@ Created on Mon Mar 16 17:19:40 2020
 import numpy as np
 import porepy as pp
 import meshio
+import networkx as nx
 
 from porepy.utils.setmembership import unique_columns_tol
 from porepy.grids.gmsh import mesh_2_grid
@@ -207,6 +208,7 @@ class LocalGridBucketSet:
         )
 
         self._recover_line_gb(network, file_name)
+        self._recover_surface_gb(network, file_name)
 
     def _recover_line_gb(self, network, file_name):
         """ We will use the following keys / items in network.decomposition:
@@ -456,6 +458,222 @@ class LocalGridBucketSet:
         # Store all edge buckets for this region
         self.buckets_1d = buckets_1d
 
+    def _recover_surface_gb(self, network, file_name):
+
+        # Network decomposition
+        decomp = network.decomposition
+
+        # Recover the full description of the gmsh mesh
+        mesh = meshio.read(file_name + ".msh")
+
+        # Invert the meshio field_data so that phys_names maps from the tags that gmsh
+        # assigns to XXX, to the physical names
+        phys_names = {v[0]: k for k, v in mesh.field_data.items()}
+
+        # Mesh points
+        pts = mesh.points
+
+        # We need to recover four types of grids:
+        #  1) 2d grids on the domain surfaces
+        #  2) 1d grids formed by the intersection of domain surfaces and fractures
+        #  3) 1d grids formed at the junction between 2d domain surface grids
+        #  4) 0d grids formed at the intersection between 1d fracture line grids
+
+        gmsh_constants = GmshConstants()
+
+        # Create all 2d grids that correspond to a domain boundary
+        g_2d = mesh_2_grid.create_2d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            is_embedded=True,
+            network=network,
+            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
+        )
+
+        # Map form the frac_num (which by construction in pp.mesh_2_grid will correspond
+        # to the number part of the gmsh physical name of the surface polygon) to the
+        # corresponding physical grid.
+        # Note that we need to be careful when accessing this information below, since
+        # the frac_num also will count any fracture surface in the network.
+        g_2d_map = {g.frac_num: g for g in g_2d}
+
+        # 1d grids formed on the intersection of fracture surfaces with the domain
+        # boundary
+        g_1d = mesh_2_grid.create_1d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            line_tag=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_LINE,
+            return_fracture_tips=False,
+        )
+
+        # Map from the frac_num, which corresponds to the column index of this line in
+        # network.decomposition['edges'], to the corresponding grids.
+        g_1d_map = {g.frac_num: g for g in g_1d}
+
+        # Next, get the 1d grids that are on the bounday between two domain surfaces.
+        # These are tagged as being on the domain boundary, however, we should only pick
+        # up those parts that are not on an edge of an interaction region.
+
+        # Find index of boundray edges that are part of an interaction region edge.
+        ia_edge = np.where(decomp["edges"][4] >= 0)[0]
+
+        # Find 1d grids along domain boundaries that are not interaction region edges.
+        # The latter is excluded by the constraints keyword.
+        g_1d_auxiliary = mesh_2_grid.create_1d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+            constraints=ia_edge,
+            return_fracture_tips=False,
+        )
+
+        # Points that are tagged as both on a fracture and on the domain boundary
+        fracture_boundary_points = np.where(
+            decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
+        )[0]
+
+        # Create grids for physical points on the boundary surfaces. This may be both
+        # on domain edges, in the meeting of surface and fracture polygons, and by the
+        # meeting of fracture surfaces within a boundary surface.
+        g_0d = mesh_2_grid.create_0d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
+        )
+
+        # Map from the fracture boundary points, in the network decomposition index, to
+        # the corresponding 0d grids
+        g_0d_map = {}
+        for g in g_0d:
+            g_0d_map[fracture_boundary_points[g.physical_name_index]] = g
+
+        # We now have all the grids needed. The next step is to group them into surfaces
+        # that are divided by the interaction region edges. Specifically, 2d surface
+        # grids will be joined if they are divided by an auxiliary 1d grid.
+
+        # Data structures for storing pairs of 2d surface and 1d auxiliary grids
+        pairs = []
+        # bookkeeping
+        num_2d_grids = len(g_2d)
+
+        # Loop over all surface grids, find all auxiliary grids with which is share
+        # nodes (a surface grid face should coincide with a 1d cell).
+        # This code is borrowed from pp.meshing.grid_list_to_grid_bucket()
+        # It is critical that the operation is carried out before splitting of the
+        # nodes, or else the local-to-global node numbering is not applicable.
+        for hi, hg in enumerate(g_2d):
+            # We have to specify the number of nodes per face to generate a
+            # matrix of the nodes of each face.
+            nodes_per_face = 2
+            fn_loc = hg.face_nodes.indices.reshape(
+                (nodes_per_face, hg.num_faces), order="F"
+            )
+            # Convert to global numbering
+            fn = hg.global_point_ind[fn_loc]
+            fn = np.sort(fn, axis=0)
+
+            for li, lg in enumerate(g_1d_auxiliary):
+                cell_2_face, cell = pp.fracs.tools.obtain_interdim_mappings(
+                    lg, fn, nodes_per_face
+                )
+                if cell_2_face.size > 0:
+                    # We have found a new pair. Adjust the counting of the 1d grid index
+                    # with the number of 2d surface grids
+                    pairs.append((hi, li + num_2d_grids))
+
+        # To find the isolated components, make the pairs into a graph.
+        graph = nx.Graph()
+        for couple in pairs:
+            graph.add_edge(couple[0], couple[1])
+
+        # Clusters refers to 2d surfaces, together wiht 1d auxiliary nodes that should
+        # be solved together. Index up to num_2d_grids points to 2d grids, accessed via
+        # g_2d, while higher index points to elements in g_1d_auxiliary
+        clusters = []
+
+        # Find the isolated subgraphs. Each of these will correspond to a set of
+        # surfaces and auxiliary grids, that should be merged in order to construct the
+        # local problems.
+        for component in nx.connected_components(graph):
+            # Extract subgraph of this cluster
+            sg = graph.subgraph(component)
+            # Make a list of edges of this subgraph
+            clusters.append(list(sg.nodes))
+
+        # Create mappings from the surface grids to its embedded 1d and 0d grids
+        g_2d_2_frac_g_map = {}
+        g_2d_2_0d_g_map = {}
+
+        # Loop over the surface grids, find its embedded lower-dimensional grids
+        for si in np.where(network.tags["boundary"])[0]:
+            g_surf = g_2d_map[si]
+
+            # 1d fracture grids are available from the network decomposition
+            g_1d_loc = []
+            for gi in decomp["line_in_frac"][si]:
+                g_1d_loc.append(g_1d_map[gi])
+            # Register information
+            g_2d_2_frac_g_map[g_surf] = g_1d_loc
+
+            # Sanity check
+            g_surf_vertexes = decomp["points"][:, decomp["polygons"][si][0]]
+            for g in g_1d_loc:
+                dist, _, _ = pp.distances.points_polygon(g.nodes, g_surf_vertexes)
+                if dist.max() > 1e-12:
+                    raise ValueError("1d grid is not in 2d surface")
+
+            # Find all nodes, in the network decomposition, of the local fracture grids
+            loc_network_nodes = decomp["edges"][
+                :2, [g.frac_num for g in g_1d_loc]
+            ].ravel()
+
+            # Intersection nodes are referred to by the local fracture grids more than
+            # once
+            intersection_nodes = np.where(np.bincount(loc_network_nodes) > 1)[0]
+            # Register information
+            g_2d_2_0d_g_map[g_surf] = [g_0d_map[i] for i in intersection_nodes]
+
+        # Finally, we can collect the surface grid buckets. There will be one for each
+        # cluster, identified above.
+        # Data structure
+        surface_buckets = []
+
+        # Loop over clusters
+        for c in clusters:
+
+            g2, g1, g0 = [], [], []
+
+            # Loop over cluster members
+            for grid_ind in c:
+                # This is either a surface grid, in which case we need to register the
+                # grid itself, and its embedded 1d and 0d fracture grids
+                if grid_ind < num_2d_grids:
+                    g_surf = g_2d[grid_ind]
+                    g2 += [g_surf]
+                    g1 += list(g_2d_2_frac_g_map[g_surf])
+                    g0 += list(g_2d_2_0d_g_map[g_surf])
+                # .. or a 1d auxiliary grid
+                else:
+                    # Here we need to adjust the grid index, to account for the
+                    # numbering used in defining the pairs above
+                    g1 += [g_1d_auxiliary[grid_ind - num_2d_grids]]
+
+            # Make list, make bucket, store it.
+            grid_list = [g2, g1, g0]
+            gb_loc = pp.meshing.grid_list_to_grid_bucket(grid_list)
+            surface_buckets.append(gb_loc)
+
+        # Done!
+        self.surface_buckets = surface_buckets
+
     def _match_points(self, p1, p2):
         """ Find occurences of coordinates in the second array within the first array.
 
@@ -529,12 +747,19 @@ if __name__ == "__main__":
     else:
         g = create_grids.cart_3d()
         reg = ia_reg.extract_tpfa_regions(g, faces=[interior_face])[0]
-        reg = ia_reg.extract_mpfa_regions(g, nodes=[13])[0]
+        #  reg = ia_reg.extract_mpfa_regions(g, nodes=[13])[0]
 
-        frac = pp.Fracture(
+        f_1 = pp.Fracture(
             np.array([[0.7, 1.4, 1.4, 0.7], [0.5, 0.5, 1.4, 1.4], [0.2, 0.2, 0.8, 0.8]])
         )
-        reg.add_fractures(fractures=[frac])
+
+        f_2 = pp.Fracture(
+            np.array([[0.3, 0.3, 1.4, 1.4], [0.7, 1.4, 1.4, 0.7], [0.1, 0.1, 0.9, 0.9]])
+        )
+
+        reg.add_fractures(fractures=[f_1, f_2])
 
         local_gb = LocalGridBucketSet(3, reg)
         local_gb.construct_local_buckets()
+
+        assert False
