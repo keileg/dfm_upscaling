@@ -38,9 +38,48 @@ class LocalGridBucketSet:
 
         gb, network, file_name = self.reg.mesh()
 
+        gmsh_constants = GmshConstants()
+
+        # We need to define point tags, which are assumed to exist by 
+        # self._recover_line_gb()
+        edges = network.decomposition["edges"]
+        
+        # Each point should be classified as either boundary, fracture or fracture and
+        # boundary, according to which edges share the point
+        
+        # Initialize by a neutral tag
+        point_tags = gmsh_constants.NEUTRAL_TAG * np.ones(
+            network.decomposition["points"].shape[1], dtype=np.int
+        )
+
+        # Find the points of boundary and fracture edges
+        boundary_points = np.union1d(
+            edges[0, edges[2] == gmsh_constants.DOMAIN_BOUNDARY_TAG],
+            edges[1, edges[2] == gmsh_constants.DOMAIN_BOUNDARY_TAG],
+        )
+        fracture_points = np.union1d(
+            edges[0, edges[2] == gmsh_constants.FRACTURE_TAG],
+            edges[1, edges[2] == gmsh_constants.FRACTURE_TAG],
+        )
+
+        # Split into fracture, boundary or both
+        fracture_boundary_points = np.intersect1d(boundary_points, fracture_points)
+        only_fracture_points = np.setdiff1d(fracture_points, boundary_points)
+        only_boundary_points = np.setdiff1d(boundary_points, fracture_points)
+
+        # Tag accordingly
+        point_tags[
+            fracture_boundary_points
+        ] = gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
+        point_tags[only_fracture_points] = gmsh_constants.FRACTURE_TAG
+        point_tags[only_boundary_points] = gmsh_constants.DOMAIN_BOUNDARY_TAG
+
+        # Store information
+        network.decomposition["point_tags"] = point_tags
+
         # for 2d problems, the physical (gmsh) tags can also be used to identify
-        # individual interaction regions (this follows form how the gmsh .geo file) is
-        # set up in gmsh.
+        # individual interaction regions (this follows form how the gmsh .geo file is
+        # set up).
         network.decomposition["edges"] = network.decomposition["edges"][[0, 1, 2, 3, 3]]
 
         self.buckets_2d = [gb]
@@ -734,14 +773,14 @@ if __name__ == "__main__":
     from dfm_upscaling.utils import create_grids
 
     interior_face = 4
-    if False:
+    if True:
         g = create_grids.cart_2d()
 
         p = np.array([[0.7, 1.3], [1.0, 1.5]])
         edges = np.array([[0], [1]])
 
-        reg = ia_reg.extract_tpfa_regions(g, faces=[interior_face])[0]
-        # reg = ia_reg.extract_mpfa_regions(g, nodes=[interior_face])[0]
+        reg = ia_reg.extract_tpfa_regions(g, faces=[4])[0]
+        reg = ia_reg.extract_mpfa_regions(g, nodes=[interior_face])[0]
         reg.add_fractures(points=p, edges=edges)
 
         local_gb = LocalGridBucketSet(2, reg)
