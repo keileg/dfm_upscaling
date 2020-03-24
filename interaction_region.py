@@ -41,9 +41,6 @@ class InteractionRegion:
         self.constraint_node_type = constraint_node_type
 
         if self.dim == 2:
-            self.pts = np.zeros((2, 0))
-            self.edges = np.zeros((2, 0))
-
             self.fracture_pts = np.zeros((3, 0))
             self.fracture_edges = np.zeros((2, 0), dtype=np.int)
         else:
