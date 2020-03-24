@@ -139,10 +139,10 @@ class LocalGridBucketSet:
         ia_edge_start, ia_edge_end = [], []
 
         # Loop over edgen in region, store coordinates
-        for edge, node_type in zip(reg.edges, reg.edge_node_type):
+        for edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
             coords = np.zeros((3, 0))
             for e, node in zip(edge, node_type):
-                coords = np.hstack((coords, reg._coord(node, e)))
+                coords = np.hstack((coords, self.reg._coord(node, e)))
 
             # The first n-1 points are start points, the rest are end points
             for i in range(coords.shape[1] - 1):
@@ -348,12 +348,12 @@ class LocalGridBucketSet:
         buckets_1d = []
 
         # Loop over the edges in the interaction region
-        for ia_edge, node_type in zip(reg.edges, reg.edge_node_type):
+        for ia_edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
 
             # Recover coordinates of the edge points
             ia_edge_coord = np.zeros((3, 0))
             for e, t in zip(ia_edge, node_type):
-                ia_edge_coord = np.hstack((ia_edge_coord, reg._coord(t, e)))
+                ia_edge_coord = np.hstack((ia_edge_coord, self.reg._coord(t, e)))
 
             # Match points in the region with points in the network
             # It may be possible to recover this information from the network
@@ -784,8 +784,8 @@ if __name__ == "__main__":
         p = np.array([[0.7, 1.3], [1.0, 1.5]])
         edges = np.array([[0], [1]])
 
-        reg = ia_reg.extract_tpfa_regions(g, faces=[4])[0]
-        reg = ia_reg.extract_mpfa_regions(g, nodes=[interior_face])[0]
+        reg = ia_reg.extract_tpfa_regions(g, faces=[3])[0]
+        reg = ia_reg.extract_mpfa_regions(g, nodes=[3])[0]
         reg.add_fractures(points=p, edges=edges)
 
         local_gb = LocalGridBucketSet(2, reg)
