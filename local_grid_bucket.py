@@ -37,6 +37,8 @@ class LocalGridBucketSet:
     def _construct_buckets_2d(self):
 
         gb, network, file_name = self.reg.mesh()
+        self.network = network
+        self.gb = gb
 
         gmsh_constants = GmshConstants()
 
@@ -89,7 +91,8 @@ class LocalGridBucketSet:
     def _construct_buckets_3d(self):
         gb, network, file_name = self.reg.mesh()
 
-        self.buckets_2d = [gb]
+        self.gb = gb
+        self.network = network
 
         decomp = network.decomposition
 
