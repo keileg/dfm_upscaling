@@ -42,13 +42,13 @@ class LocalGridBucketSet:
 
         gmsh_constants = GmshConstants()
 
-        # We need to define point tags, which are assumed to exist by 
+        # We need to define point tags, which are assumed to exist by
         # self._recover_line_gb()
         edges = network.decomposition["edges"]
-        
+
         # Each point should be classified as either boundary, fracture or fracture and
         # boundary, according to which edges share the point
-        
+
         # Initialize by a neutral tag
         point_tags = gmsh_constants.NEUTRAL_TAG * np.ones(
             network.decomposition["points"].shape[1], dtype=np.int
@@ -324,6 +324,14 @@ class LocalGridBucketSet:
             decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
         )[0]
 
+        # Assign the 0d grids an attribute g.from_fracture, depending on whether it
+        # coincides with a fracture or is an auxiliary point
+        for g in g_0d_frac_bound:
+            g.from_fracture = True
+
+        for g in g_0d_domain_boundary:
+            g.from_fracture = False
+
         # A map from fracture points on the domain boundary to the 0d grids.
         # The keys are the indexes in the decomposition of the network.
         frac_bound_point_2_g = {}
@@ -405,7 +413,9 @@ class LocalGridBucketSet:
             if is_boundary_edge:
                 edge_grids_0d = []
             else:
-                edge_grids_0d = [domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]]
+                edge_grids_0d = [
+                    domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]
+                ]
 
             # Data structure for storing point grids along the edge that corresponds to
             # fracture grids
@@ -598,6 +608,17 @@ class LocalGridBucketSet:
             mesh.cell_data,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
+
+        # Assign the 1d and 0d grids an attribute g.from_fracture, depending on whether
+        # they coincide with a fracture or are auxiliary
+        for g in g_1d:
+            g.from_fracture = True
+
+        for g in g_1d_auxiliary:
+            g.from_fracture = False
+
+        for g in g_0d:
+            g.from_fracture = True
 
         # Map from the fracture boundary points, in the network decomposition index, to
         # the corresponding 0d grids
