@@ -27,6 +27,12 @@ class LocalGridBucketSet:
         self.reg = reg
         self.tol = 1e-6
 
+    def bucket_list(self):
+        if self.dim == 2:
+            return [self.line_gb, [self.gb]]
+        else:
+            return [self.line_gb, self.surface_gb, [self.gb]]
+
     def construct_local_buckets(self):
 
         if self.dim == 2:
@@ -516,7 +522,7 @@ class LocalGridBucketSet:
             buckets_1d.append(gb_edge)
 
         # Store all edge buckets for this region
-        self.buckets_1d = buckets_1d
+        self.line_gb = buckets_1d
 
     def _recover_surface_gb(self, network, file_name):
 
@@ -743,7 +749,7 @@ class LocalGridBucketSet:
             surface_buckets.append(gb_loc)
 
         # Done!
-        self.surface_buckets = surface_buckets
+        self.surface_gb = surface_buckets
 
     def _match_points(self, p1, p2):
         """ Find occurences of coordinates in the second array within the first array.
