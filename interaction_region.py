@@ -13,25 +13,27 @@ import pdb
 
 
 class InteractionRegion:
-    def __init__(self,
-                 g: pp.Grid,
-                 name: str,
-                 reg_ind: int, 
-                 surfaces: np.ndarray, 
-                 surface_node_type: List[Tuple[str]],
-                 surface_is_boundary: List[bool],
-                 edges: np.ndarray,
-                 edge_node_type: List[Tuple[str]],
-                 constraints: List[Tuple[int]],
-                 constraint_node_type: List[Tuple[str]],
-                 central_node: int=None) -> None:
-        
+    def __init__(
+        self,
+        g: pp.Grid,
+        name: str,
+        reg_ind: int,
+        surfaces: np.ndarray,
+        surface_node_type: List[Tuple[str]],
+        surface_is_boundary: List[bool],
+        edges: np.ndarray,
+        edge_node_type: List[Tuple[str]],
+        constraints: List[Tuple[int]],
+        constraint_node_type: List[Tuple[str]],
+        central_node: int = None,
+    ) -> None:
+
         self.g = g
         self.dim = g.dim
         self.name = name
 
         self.reg_ind = reg_ind
-        
+
         self.surfaces = surfaces
         self.surface_node_type = surface_node_type
         self.surface_is_boundary = surface_is_boundary
@@ -49,15 +51,14 @@ class InteractionRegion:
         if central_node is not None:
             self.node_ind: int = central_node
             self.node_coord = g.nodes[:, central_node].reshape((-1, 1))
-            
-            
-        
 
     ####################
     ## Functions related to meshing of fracture networks
     ####################
 
-    def mesh(self) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
+    def mesh(
+        self
+    ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
         """ Create a local mesh for this interaction region.
         """
         if self.dim == 2:
@@ -164,7 +165,7 @@ class InteractionRegion:
 
         return gb, network, file_name
 
-    def _mesh_3d(self)  -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
+    def _mesh_3d(self) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
         boundaries: List[np.ndarray] = []
         for surf_ind, (surf, node_type) in enumerate(
@@ -225,9 +226,12 @@ class InteractionRegion:
 
         return p
 
-    def add_fractures(self, points: Optional[np.ndarray] = None,
-                      edges: Optional[np.ndarray] = None,
-                      fractures: Optional[List] = None) -> None:
+    def add_fractures(
+        self,
+        points: Optional[np.ndarray] = None,
+        edges: Optional[np.ndarray] = None,
+        fractures: Optional[List] = None,
+    ) -> None:
         if self.dim == 3:
             self.fractures = fractures
         else:
@@ -235,6 +239,22 @@ class InteractionRegion:
                 points = np.vstack((points, np.zeros(points.shape[1])))
             self.fracture_pts = points
             self.fracture_edges = edges
+
+    def coarse_cell_centers(self):
+
+        ci = []
+        coords = np.zeros((3, 0))
+        for edge, node_type in zip(self.edges, self.edge_node_type):
+            for e, node in zip(edge, node_type):
+                if node == "cell":
+                    ci.append(e)
+                    coords = np.hstack((coords, self._coord(node, e)))
+
+        ci = np.array(ci, dtype=np.int)
+
+        unique_ci, ind = np.unique(ci, return_index=True)
+
+        return unique_ci, coords[:, ind]
 
     ###### Utility functions
 
@@ -387,10 +407,18 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
             constraints = [nodes]
             constraint_node_type = [nodes.size * ["node"]]
 
-        reg = InteractionRegion(g, "tpfa", fi,
-                                surfaces, surface_node_type, surface_is_boundary,
-                                edges, edge_node_type,
-                                constraints, constraint_node_type)
+        reg = InteractionRegion(
+            g,
+            "tpfa",
+            fi,
+            surfaces,
+            surface_node_type,
+            surface_is_boundary,
+            edges,
+            edge_node_type,
+            constraints,
+            constraint_node_type,
+        )
 
         region_list.append(reg)
 
@@ -523,12 +551,19 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
         edges = np.array(tmp_edges)
         surfaces = np.array(tmp_surfaces)
 
-        reg = InteractionRegion(g, "mpfa", ni,
-                                surfaces, surface_node_type, surface_is_boundary,
-                                edges, edge_node_type,
-                                constraints, constraints_node_type,
-                                central_node=ni)
-
+        reg = InteractionRegion(
+            g,
+            "mpfa",
+            ni,
+            surfaces,
+            surface_node_type,
+            surface_is_boundary,
+            edges,
+            edge_node_type,
+            constraints,
+            constraints_node_type,
+            central_node=ni,
+        )
 
         region_list.append(reg)
 
