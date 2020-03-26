@@ -46,6 +46,10 @@ class LocalGridBucketSet:
         self.network = network
         self.gb = gb
 
+        for g, _ in gb:
+            if g.dim < self.dim:
+                g.from_fracture = True
+
         gmsh_constants = GmshConstants()
 
         # We need to define point tags, which are assumed to exist by
@@ -336,6 +340,9 @@ class LocalGridBucketSet:
             g.from_fracture = True
 
         for g in g_0d_domain_boundary:
+            g.from_fracture = False
+
+        for g in g_1d:
             g.from_fracture = False
 
         # A map from fracture points on the domain boundary to the 0d grids.
