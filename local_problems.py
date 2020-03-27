@@ -11,107 +11,9 @@ import porepy as pp
 
 from scipy.sparse.linalg import spsolve
 
-from dfm_upscaling.utils import create_grids
-from dfm_upscaling import interaction_region as ia_reg
-from dfm_upscaling.local_grid_bucket import LocalGridBucketSet
 
 
 
-def set_parameters(gb):
-    """
-    Assign parameters. Very simple for now, this must be improved.
-
-    Args:
-        gb (TYPE): DESCRIPTION.
-
-    Returns:
-        None.
-
-    """
-
-    Nd = gb.dim_max()
-
-    keyword = "flow"
-
-    # First initialize data
-    for g, d in gb:
-
-        param = {}
-
-        if g.dim == Nd:
-            domain_boundary = np.logical_and(
-                g.tags["domain_boundary_faces"],
-                np.logical_not(g.tags["fracture_faces"]),
-            )
-
-            boundary_faces = np.where(domain_boundary)[0]
-            bc_type = boundary_faces.size * ["dir"]
-
-            bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
-            param["bc"] = bc
-
-        pp.initialize_default_data(g, d, keyword, param)
-
-    for e, d in gb.edges():
-        mg = d["mortar_grid"]
-
-        g1, g2 = gb.nodes_of_edge(e)
-
-        param = {}
-
-        if g1.from_fracture:
-            param["normal_diffusivity"] = 1e1
-
-        pp.initialize_data(mg, d, keyword, param)
-
-
-def set_variables_discretizations(gb):
-    """
-    Assign variables, and set discretizations. 
-    
-    NOTE: keywords and variable names are hardcoded here. This should be centralized.
-
-    Args:
-        gb (TYPE): DESCRIPTION.
-
-    Returns:
-        None.
-
-    """
-    keyword = "flow"
-
-    mpfa = pp.Mpfa(keyword)
-
-    robin = pp.RobinCoupling(keyword, mpfa, mpfa)
-    continuity = pp.FluxPressureContinuity(keyword, mpfa, mpfa)
-
-    p = "pressure"
-    mortar_flux = "mortar_flux"
-
-    diffusion_term_flow = "flow"
-
-    for g, d in gb:
-        d[pp.PRIMARY_VARIABLES] = {p: {"cells": 1, "faces": 0}}
-        d[pp.DISCRETIZATION] = {p: {diffusion_term_flow: mpfa}}
-    # Loop over the edges in the GridBucket, define primary variables and discretizations
-    for e, d in gb.edges():
-        g1, g2 = gb.nodes_of_edge(e)
-        d[pp.PRIMARY_VARIABLES] = {mortar_flux: {"cells": 1}}
-
-        # The type of lower-dimensional discretization depends on whether this is a
-        # (part of a) fracture, or a transition between two line or surface grids.
-        if g1.from_fracture:
-            edge_discretization = robin
-        else:
-            edge_discretization = continuity
-
-        d[pp.COUPLING_DISCRETIZATION] = {
-            "mortar_coupling": {
-                g1: (p, diffusion_term_flow),
-                g2: (p, diffusion_term_flow),
-                e: (mortar_flux, edge_discretization),
-            }
-        }
 
 
 def transfer_bc(g_prev, v_prev, g_new, data_new):
@@ -179,11 +81,10 @@ def transfer_bc(g_prev, v_prev, g_new, data_new):
     return cell_ind
 
 
-def cell_basis_functions(reg, local_gb):
+def cell_basis_functions(reg, local_gb, discr):
     """ 
     Calculate basis function related to coarse cells for an interaction region
     
-    TODO: We should also calculate the flux over the constraints in the main gb.
 
     """
 
@@ -197,9 +98,6 @@ def cell_basis_functions(reg, local_gb):
     # and then the real local gb
     bucket_list = local_gb.bucket_list()
 
-    # Variable name for the pressure.
-    # TODO: Put this in a central place, probably as a class variable
-    pressure_var = "pressure"
 
     # Loop over all grid buckets: first type of gb (line, surface, 3d)
     for gb_set in bucket_list:
@@ -209,8 +107,8 @@ def cell_basis_functions(reg, local_gb):
             # The parameter definition should become much more general at some point
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
-            set_parameters(gb)
-            set_variables_discretizations(gb)
+            discr.set_parameters_cell_basis(gb)
+            discr.set_variables_discretizations(gb)
 
             # Create an Assembler and discretized the specified problem. The parameters
             # and type (not value) of boundary condition will be the same throughout the
@@ -289,7 +187,7 @@ def cell_basis_functions(reg, local_gb):
                     d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
                     # Store the pressure values to be used as new boundary conditions
                     # for the problem with one dimension more
-                    new_prev_val.append((g, d[pp.STATE][pressure_var]))
+                    new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
 
             # We are done with all buckets of this dimension. Redefine the current
             # values to previous values, and move on to the next set of buckets.
@@ -302,24 +200,3 @@ def cell_basis_functions(reg, local_gb):
     # All done
     return basis_functions
     
-
-
-if __name__ == "__main__":
-
-    g = create_grids.cart_2d()
-
-    dim = g.dim
-
-    reg = ia_reg.extract_tpfa_regions(g, faces=[4])[0]
-    reg = ia_reg.extract_mpfa_regions(g, nodes=[4])[0]
-
-    # Two crossing fractures. One internal to the domain, one crosses the boundary
-    p = np.array([[0.7, 1.3, 1.1, 1.5], [1.1, 1, 0.9, 1.5]])
-    e = np.array([[0, 2], [1, 3]])
-
-    reg.add_fractures(points=p, edges=e)
-    # Construct set of 
-    local_gb = LocalGridBucketSet(dim, reg)
-    local_gb.construct_local_buckets()
-
-    basis = cell_basis_functions(reg, local_gb)
