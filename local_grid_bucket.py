@@ -101,6 +101,10 @@ class LocalGridBucketSet:
     def _construct_buckets_3d(self):
         gb, network, file_name = self.reg.mesh()
 
+        for g, _ in gb:
+            if g.dim < self.dim:
+                g.from_fracture = True
+
         self.gb = gb
         self.network = network
 
