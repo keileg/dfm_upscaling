@@ -45,6 +45,7 @@ class LocalGridBucketSet:
         gb, network, file_name = self.reg.mesh()
         self.network = network
         self.gb = gb
+        self.file_name = file_name
 
         for g, _ in gb:
             if g.dim < self.dim:
@@ -107,6 +108,7 @@ class LocalGridBucketSet:
 
         self.gb = gb
         self.network = network
+        self.file_name = file_name
 
         decomp = network.decomposition
 
