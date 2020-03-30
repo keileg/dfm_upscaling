@@ -107,7 +107,7 @@ class FVDFM(pp.FVElliptic):
                 edge_discretization = continuity
     
             d[pp.COUPLING_DISCRETIZATION] = {
-                "mortar_coupling": {
+                "coupling_flux": {
                     g1: (self.cell_variable, diffusion_term_flow),
                     g2: (self.cell_variable, diffusion_term_flow),
                     e: (self.mortar_variable, edge_discretization),
