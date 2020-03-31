@@ -285,4 +285,4 @@ def cell_basis_functions(reg, local_gb, discr):
         # Move on to the next basis function
 
     # All done
-    return coarse_gb, basis_functions
+    return coarse_gb, basis_functions, assembler
