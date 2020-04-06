@@ -287,4 +287,11 @@ def cell_basis_functions(reg, local_gb, discr):
         # Move on to the next basis function
 
     # All done
+<<<<<<< Updated upstream
     return coarse_gb, basis_functions, coarse_assembler
+=======
+    return coarse_gb, basis_functions, assembler
+
+def transmissibility_upscaling():
+    pass
+>>>>>>> Stashed changes
