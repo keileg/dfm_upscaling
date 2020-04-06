@@ -10,7 +10,7 @@ from local_grid_bucket import LocalGridBucketSet
 
 
 class FVDFM(pp.FVElliptic):
-    def __init__(self, micro_network, keyword="flow"):
+    def __init__(self, keyword="flow"):
         super(FVDFM, self).__init__(keyword)
 
         self.cell_variable = "pressure"
@@ -25,7 +25,7 @@ class FVDFM(pp.FVElliptic):
         # the fracture network that has to be upscaled
         # @Eirik maybe not as an input parameter, let's see
         # EK: This belongs to the data dictionary that enters the discretize method
-        self.micro_network = micro_network
+        #self.micro_network = micro_network
 
     def set_parameters(self, gb):
         """
@@ -265,8 +265,8 @@ class Tpfa_DFM(FVDFM):
     Define the specific class for tpfa upscaling
     """
 
-    def __init__(self, micro_network, keyword="flow"):
-        super(Tpfa_DFM, self).__init__(micro_network, keyword)
+    def __init__(self, keyword="flow"):
+        super(Tpfa_DFM, self).__init__(keyword)
         self.method = pp.Tpfa
 
     def _interaction_regions(self, g):
@@ -279,8 +279,8 @@ class Mpfa_DFM(FVDFM):
     Define the specific class for tpfa upscaling
     """
 
-    def __init__(self, micro_network, keyword="flow"):
-        super(Mpfa_DFM, self).__init__(micro_network, keyword)
+    def __init__(self, keyword="flow"):
+        super(Mpfa_DFM, self).__init__(keyword)
         self.method = pp.Mpfa
 
     def _interaction_regions(self, g):
