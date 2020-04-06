@@ -50,15 +50,25 @@ def main():
     gb = macro_network.mesh(mesh_kwargs)
 
     # plot the suff
-    pp.plot_fractures(micro_network.pts, micro_network.edges, micro_networks.domain)
+    pp.plot_fractures(micro_network.pts, micro_network.edges, micro_network.domain)
     pp.plot_grid(gb, info="c", alpha=0)
 
     # construct the solver
-    tpfa_dfm = Tpfa_DFM(micro_network)
+    tpfa_dfm = Tpfa_DFM()
+
+    # Set data for the upscaling problem
+    g = gb.grids_of_dimension(gb.dim_max())[0]
+    d = gb.node_props(g)
+
+    # store the
+    # EK: We probably need to initialize some of the nested dictionaries
+    d[pp.PARAMETERS][tpfa_dfm.keyword][tpfa_dfm.network_keyword] = micro_network
 
     # set parameters and discretization variables
-    tpfa_dfm.set_parameters(gb)
-    tpfa_dfm.set_variables_discretizations(gb)
+    # EK: This must be done in this run-script - it is not the responsibility of the
+    # discretization. We may want to construct a model for this.
+    # tpfa_dfm.set_parameters(gb)
+    # tpfa_dfm.set_variables_discretizations(gb)
 
     # discretize with the assembler
     assembler = pp.Assembler(gb)
