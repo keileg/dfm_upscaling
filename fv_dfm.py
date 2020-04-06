@@ -3,6 +3,7 @@
 """
 import numpy as np
 import porepy as pp
+import scipy.sparse as sps
 
 import interaction_region as ia_reg
 import local_problems
@@ -36,8 +37,6 @@ class FVDFM(pp.FVElliptic):
             None.
 
         """
-
-        keyword = "flow"
 
         # First initialize data
         for g, d in gb:
@@ -150,23 +149,29 @@ class FVDFM(pp.FVElliptic):
             gb_set.construct_local_buckets()
 
             # First basis functions for local problems
-            basis = local_problems.cell_basis_functions(reg, gb_set, self)
+            basis_functions, assemblers = local_problems.cell_basis_functions(
+                reg, gb_set, self
+            )
 
             # Call method to transfer basis functions to transmissibilties over coarse
             # edges
+            ci, fi, trm = local_problems.compute_transmissibilies(
+                gb_set, basis_functions, assemblers
+            )
+
             import pdb
 
             pdb.set_trace()
-            print(basis)
 
-            # I[idx] =
-            # J[idx] =
-            # dataIJ[idx] =
-            # idx += 1
+            I.append(fi)
+            J.append(ci)
+            dataIJ.append(trm)
 
         # Construct the global matrix
 
-        mass = sps.coo_matrix((dataIJ, (I, J))).tocsr()
+        flux = sps.coo_matrix((dataIJ, (I, J))).tocsr()
+
+        matrix_dictionary[self.flux_matrix_key] = flux
 
     def _interaction_regions(self, g):
         raise NotImplementedError
