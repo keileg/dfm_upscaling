@@ -166,9 +166,9 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
 
 
 def cell_basis_functions(reg, local_gb, discr):
-    """ 
+    """
     Calculate basis function related to coarse cells for an interaction region
-    
+
 
     """
 
@@ -191,7 +191,7 @@ def cell_basis_functions(reg, local_gb, discr):
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
             discr.set_parameters_cell_basis(gb)
-            discr.set_variables_discretizations(gb)
+            discr.set_variables_discretizations_cell_basis(gb)
 
             # Create an Assembler and discretized the specified problem. The parameters
             # and type (not value) of boundary condition will be the same throughout the

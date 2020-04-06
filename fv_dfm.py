@@ -70,6 +70,7 @@ class FVDFM(pp.FVElliptic):
 
     def set_variables_discretizations(self, gb):
         """
+
         Assign variables, and set discretizations for a micro gb
         
         EK: NOTE: This method is called in the construction of local 
@@ -83,8 +84,6 @@ class FVDFM(pp.FVElliptic):
         """
 
         for g, d in gb:
-            # @Eirik maybe this only if g is dim_max
-            # EK: The method will be called a number of times for different 
             cell_discr = self
             d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
             d[pp.DISCRETIZATION] = {self.cell_variable: {self.cell_discr: cell_discr}}
@@ -205,7 +204,7 @@ class FVDFM(pp.FVElliptic):
 
         # Allocate the data to store matrix entries, that's an efficient
         # way to create a sparse matrix.
-        size = 20  
+
         ###### @Eirik, I imagine we can compute this for tpfa and mpfa
         # EK: Use arrays, convert to np.arrays afterwards. I don't want to think about
         # how many orders of maginuted faster the rest of the code must be before this
@@ -240,6 +239,7 @@ class FVDFM(pp.FVElliptic):
             # idx += 1
 
         # Construct the global matrix
+
         mass = sps.coo_matrix((dataIJ, (I, J))).tocsr()
 
     def _interaction_regions(self, g):
