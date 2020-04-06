@@ -15,7 +15,6 @@ from local_grid_bucket import LocalGridBucketSet
 
 
 class FVDFM(pp.FVElliptic):
-
     def __init__(self, micro_network, keyword="flow"):
         super(FVDFM, self).__init__(keyword)
 
@@ -63,17 +62,16 @@ class FVDFM(pp.FVElliptic):
 
         for e, d in gb.edges():
             raise ValueError("no fractures so far")
-            #mg = d["mortar_grid"]
+            # mg = d["mortar_grid"]
 
-            #g1, g2 = self.gb.nodes_of_edge(e)
+            # g1, g2 = self.gb.nodes_of_edge(e)
 
-            #param = {}
+            # param = {}
 
-            #if g1.from_fracture:
+            # if g1.from_fracture:
             #    param["normal_diffusivity"] = 1e1
 
-            #pp.initialize_data(mg, d, self.keyword, param)
-
+            # pp.initialize_data(mg, d, self.keyword, param)
 
     def set_variables_discretizations(self, gb):
         """
@@ -158,7 +156,6 @@ class FVDFM(pp.FVElliptic):
 
             pp.initialize_data(mg, d, self.keyword, param)
 
-
     def set_variables_discretizations_cell_basis(self, gb):
         """
         Assign variables, and set discretizations for the micro gb.
@@ -210,7 +207,7 @@ class FVDFM(pp.FVElliptic):
 
         # Allocate the data to store matrix entries, that's an efficient
         # way to create a sparse matrix.
-        size = 20 ###### @Eirik, I imagine we can compute this for tpfa and mpfa
+        size = 20  ###### @Eirik, I imagine we can compute this for tpfa and mpfa
         I = np.empty(size, dtype=np.int)
         J = np.empty(size, dtype=np.int)
         dataIJ = np.empty(size)
@@ -231,13 +228,15 @@ class FVDFM(pp.FVElliptic):
 
             # Call method to transfer basis functions to transmissibilties over coarse
             # edges
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             print(basis)
 
-            #I[idx] =
-            #J[idx] =
-            #dataIJ[idx] =
-            #idx += 1
+            # I[idx] =
+            # J[idx] =
+            # dataIJ[idx] =
+            # idx += 1
 
         # Construct the global matrix
         mass = sps.coo_matrix((dataIJ, (I, J)))
@@ -256,10 +255,12 @@ class FVDFM(pp.FVElliptic):
         else:
             raise ValueError
 
+
 class Tpfa_DFM(FVDFM):
     """
     Define the specific class for tpfa upscaling
     """
+
     def __init__(self, micro_network, keyword="flow"):
         super(Tpfa_DFM, self).__init__(micro_network, keyword)
         self.method = pp.Tpfa
@@ -268,10 +269,12 @@ class Tpfa_DFM(FVDFM):
         for fi in range(g.num_faces):
             yield ia_reg.extract_tpfa_regions(g, fi)[0]
 
+
 class Mpfa_DFM(FVDFM):
     """
     Define the specific class for tpfa upscaling
     """
+
     def __init__(self, micro_network, keyword="flow"):
         super(Mpfa_DFM, self).__init__(micro_network, keyword)
         self.method = pp.Mpfa

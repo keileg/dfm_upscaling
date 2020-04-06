@@ -5,6 +5,7 @@ import porepy as pp
 from fv_dfm import Tpfa_DFM
 from fracture_set import split_network, Criterion
 
+
 class My_Tpfa_DFM(Tpfa_DFM):
     # I might use this guy to define the user-defined set_parameters* functions
     # for micro and macro fracture networks
@@ -14,17 +15,20 @@ class My_Tpfa_DFM(Tpfa_DFM):
     def set_parameters_cell_basis(self, gb):
         pass
 
+
 def write_network(file_name):
-    content = ("FID,START_X,START_Y,END_X,END_Y\n"
-               "0,0,0.1,1,0.9\n"
-               #"0,0.25,0.25,0.75,0.25\n"
-               #"1,0.5,0,0.5,0.25\n"
-               #"2,0.5,0.25,0.5,0.35\n"
-               #"3,0.35,0.75,0.65,0.75\n"
-               #"4,0.5,1,0.5,0.65"
-              )
+    content = (
+        "FID,START_X,START_Y,END_X,END_Y\n"
+        "0,0,0.1,1,0.9\n"
+        # "0,0.25,0.25,0.75,0.25\n"
+        # "1,0.5,0,0.5,0.25\n"
+        # "2,0.5,0.25,0.5,0.35\n"
+        # "3,0.35,0.75,0.65,0.75\n"
+        # "4,0.5,1,0.5,0.65"
+    )
     with open(file_name, "w") as out_file:
         out_file.write(content)
+
 
 def main():
     # example in 2d
@@ -65,6 +69,7 @@ def main():
     # Solve and distribute
     x = spsolve(A, b)
     assembler.distribute_variable(x)
+
 
 if __name__ == "__main__":
     main()
