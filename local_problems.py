@@ -8,8 +8,11 @@ Created on Tue Mar 24 06:56:22 2020
 
 import numpy as np
 import porepy as pp
+import meshio
 
 from scipy.sparse.linalg import spsolve
+from porepy.grids.constants import GmshConstants
+from porepy.grids.gmsh import mesh_2_grid
 
 
 def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
@@ -287,11 +290,137 @@ def cell_basis_functions(reg, local_gb, discr):
         # Move on to the next basis function
 
     # All done
-<<<<<<< Updated upstream
-    return coarse_gb, basis_functions, coarse_assembler
-=======
-    return coarse_gb, basis_functions, assembler
 
-def transmissibility_upscaling():
-    pass
->>>>>>> Stashed changes
+    return coarse_gb, basis_functions, coarse_assembler
+
+
+def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
+    # Read the mesh file for the micro problem
+    mesh = meshio.read(local_gb.file_name + ".msh")
+
+    # Invert the meshio field_data so that phys_names maps from the tags that gmsh
+    # assigns to XXX, to the physical names
+    phys_names = {v[0]: k for k, v in mesh.field_data.items()}
+
+    # Mesh points
+    pts = mesh.points
+
+    gmsh_constants = GmshConstants()
+
+    # Data structures for storing cell and face index for the local problems, together
+    # with the corresponding transmissibilities.
+    coarse_cell_ind, coarse_face_ind, trm = [], [], []
+
+    # The macro transmissibilities can be recovered from the fluxes over those micro
+    # faces that coincide with a macro face.
+    # To identify these micro faces, we recover the micro surface grids. These were
+    # present as internal constraints in the local grid bucket.
+    if dim == 2:
+        # Create all 2d grids that correspond to an auxiliary surface
+        g_surf, _ = mesh_2_grid.create_1d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            line_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
+        )
+    else:
+        # EK: 3d domains have not been tested.
+        # Create all 2d grids that correspond to a domain boundary
+        g_surf = mesh_2_grid.create_2d_grids(
+            pts,
+            mesh.cells,
+            phys_names,
+            mesh.cell_data,
+            network=local_gb.network,
+            is_embedded=True,
+            surface_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
+        )
+
+    # Loop over all created surface grids,
+    for gi, gs in enumerate(g_surf):
+
+        # Cell and node coordinates.
+        # EK: Not sure if we need all of this, or more
+        gs.compute_geometry()
+        cc = gs.cell_centers
+        nc = gs.nodes
+
+        # There should be a single face among the constraint nodes (both in 2d and 3d)
+        face_node = np.where([t == "face" for t in reg.constraint_node_type[gi]])[0]
+        assert face_node.size == 1
+
+        # Macro face index
+        cfi = reg.constraints[gi][face_node[0]]
+        # Macro normal vector of the face
+        coarse_normal = g.face_normals[:, cfi]
+
+        # Loop over all basis functions constructed by the local problem.
+        for cci, basis in basis_functions.items():
+
+            # Get the assembler used for the construction of the basis function for
+            # this coarse cell. Distribute the solution.
+            cc_assembler[cci].distribute_variable(basis)
+
+            # Grid bucket of this local problem.
+            # This will be the full Nd grid bucket.
+            gb = cc_assembler.gb
+
+            # Reconstruct fluxes in the grid bucket
+            pp.fvutils.compute_darcy_flux(
+                gb, p_name=discr.cell_variable, lam_name=discr.mortar_variable
+            )
+
+            # Loop over all grids in the grid_bucket.
+            for loc_g, d in gb:
+
+                # Flux field for this problem
+                full_flux = d[pp.PARAMETERS][discr.keyword]["darcy_flux"]
+
+                if loc_g.dim == gs.dim + 1:
+                    # find faces in the matrix grid on the surface
+                    grid_map = local_problems.match_points_on_surface(
+                        cc, loc_g.face_centers, dim, gs.dim
+                    )
+                elif loc_g.dim == gs.dim:
+                    # find fractures that intersect with the surface
+                    # If we get an error message from this call, about more than one
+                    # hit in the second argument (p), chances are that a fracture is
+                    # intersecting at the auxiliary surface
+
+                    # EK: Something goes wrong in this case (fracture crosses the
+                    # surface), though not necessarily in this function call. No idea
+                    # what is wrong.
+                    grid_map = local_problems.match_points_on_surface(
+                        nc, loc_g.face_centers, dim, gs.dim
+                    )
+                else:
+                    # EK: Not sure what to do here
+                    # We may drop this alternative for a while, but it will in effect
+                    # correspond to basis functions that are not a partition of unity.
+                    raise NotImplementedError("Have not gotten this far")
+
+                # If we found any matches, loop over all micro faces, sum the fluxes,
+                # possibly with an adjustment of the flux direction.
+                if len(grid_map) > 0:
+                    surface_flux = []
+                    for fi in grid_map:
+                        loc_flux = full_flux[fi[1]]
+                        # If the micro and macro normal vectors point in different
+                        # directions, we should switch the flux
+                        fine_normal = loc_g.face_normals[:, fi[1]]
+                        sgn = np.sign(fine_normal.dot(coarse_normal))
+                        surface_flux.append(loc_flux * sgn)
+
+                    # Store the macro cell and face index, together with the
+                    # transmissibility
+                    coarse_cell_ind.append(cci)
+                    coarse_face_ind.append(cfi)
+                    trm.append(np.asarray(surface_flux).sum())
+                    if loc_g.dim == gs.dim:
+                        # EK: This is roughly where I'm looking for errors right now
+                        print(surface_flux)
+                        #   pdb.set_trace()
+                        debug = []
+
+    return coarse_cell_ind, coarse_face_ind, trm
