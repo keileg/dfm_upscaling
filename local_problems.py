@@ -291,7 +291,7 @@ def cell_basis_functions(reg, local_gb, discr):
 
     # All done
 
-    return coarse_gb, basis_functions, coarse_assembler
+    return basis_functions, coarse_assembler
 
 
 def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
