@@ -13,6 +13,9 @@ class FVDFM(pp.FVElliptic):
     def __init__(self, keyword="flow"):
         super(FVDFM, self).__init__(keyword)
 
+        # Keyword used to identify the micro network to be upscaled.
+        self.network_keyword = "micro_network"
+
         self.cell_variable = "pressure"
         self.mortar_variable = "mortar_flux"
 
@@ -25,7 +28,7 @@ class FVDFM(pp.FVElliptic):
         # the fracture network that has to be upscaled
         # @Eirik maybe not as an input parameter, let's see
         # EK: This belongs to the data dictionary that enters the discretize method
-        #self.micro_network = micro_network
+        # self.micro_network = micro_network
 
     def set_parameters(self, gb):
         """
@@ -211,16 +214,18 @@ class FVDFM(pp.FVElliptic):
         ###### @Eirik, I imagine we can compute this for tpfa and mpfa
         # EK: Use arrays, convert to np.arrays afterwards. I don't want to think about
         # how many orders of maginuted faster the rest of the code must be before this
-        # 
+        #
         I = []
         J = []
         dataIJ = []
+        
+        micro_network = parameter_dictionary[self.network_keyword]
 
         # This for-loop could be parallelized. TODO
         for reg in self._interaction_regions(g):
 
             # Add the fractures to be upscaled
-            self._add_network_to_upscale(reg, self.micro_network)
+            self._add_network_to_upscale(reg, micro_network)
 
             # construct the sequence of local grid buckets
             gb_set = LocalGridBucketSet(g.dim, reg)
