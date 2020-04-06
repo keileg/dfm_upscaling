@@ -25,95 +25,6 @@ class FVDFM(pp.FVElliptic):
         # method for the discretization (tpfa or mpfa so far)
         self.method = None
 
-        # the fracture network that has to be upscaled
-        # @Eirik maybe not as an input parameter, let's see
-        # EK: This belongs to the data dictionary that enters the discretize method
-        # self.micro_network = micro_network
-
-    def set_parameters(self, gb):
-        """
-        Assign parameters for the macro gb
-        
-        EK: This method should not be here - It belongs to the runscript.
-
-        Args:
-            gb (TYPE): the macroscopic grid bucket.
-
-        Returns:
-            None.
-
-        """
-        # First initialize data
-        for g, d in gb:
-            param = {}
-
-            if g.dim == gb.dim_max():
-                domain_boundary = np.logical_and(
-                    g.tags["domain_boundary_faces"],
-                    np.logical_not(g.tags["fracture_faces"]),
-                )
-
-                boundary_faces = np.where(domain_boundary)[0]
-                bc_type = boundary_faces.size * ["dir"]
-
-                bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
-                param["bc"] = bc
-
-            pp.initialize_default_data(g, d, self.keyword, param)
-
-        for e, d in gb.edges():
-            raise ValueError("no fractures so far")
-            # mg = d["mortar_grid"]
-
-            # g1, g2 = self.gb.nodes_of_edge(e)
-
-            # param = {}
-
-            # if g1.from_fracture:
-            #    param["normal_diffusivity"] = 1e1
-
-            # pp.initialize_data(mg, d, self.keyword, param)
-
-    def set_variables_discretizations(self, gb):
-        """
-
-        Assign variables, and set discretizations for a macro gb.
-        
-        EK: This method should not be here - It belongs to the runscript.
-
-        Args:
-            gb (TYPE): the macroscopic grid bucket.
-
-        Returns:
-            None.
-
-        """
-
-        for g, d in gb:
-            cell_discr = self
-            d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
-            d[pp.DISCRETIZATION] = {self.cell_variable: {self.cell_discr: cell_discr}}
-            d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
-
-        # Loop over the edges in the GridBucket, define primary variables and discretizations
-        for e, d in gb.edges():
-            raise ValueError("no fractures so far")
-        #    g1, g2 = gb.nodes_of_edge(e)
-        #    method = self.method(self.keyword)
-        #    d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
-        #    # The type of lower-dimensional discretization depends on whether this is a
-        #    # (part of a) fracture, or a transition between two line or surface grids.
-        #    mortar_discr = pp.RobinCoupling(self.keyword, method, method)
-
-        #    d[pp.COUPLING_DISCRETIZATION] = {
-        #        self.mortar_discr: {
-        #            g1: (self.cell_variable, self.cell_discr),
-        #            g2: (self.cell_variable, self.cell_discr),
-        #            e: (self.mortar_variable, mortar_discr),
-        #        }
-        #    }
-        #    d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
-
     def set_parameters_cell_basis(self, gb):
         """
         Assign parameters for the micro gb. Very simple for now, this must be improved.
@@ -174,7 +85,8 @@ class FVDFM(pp.FVElliptic):
             None.
 
         """
-
+        # Use mpfa for the fine-scale problem for now. We may generalize this at some
+        # point, but that should be a technical detail.
         fine_scale_dicsr = pp.Mpfa(self.keyword)
 
         for g, d in gb:
