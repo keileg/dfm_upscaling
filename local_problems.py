@@ -209,6 +209,7 @@ def cell_basis_functions(reg, local_gb, discr):
 
     basis_functions = {}
     coarse_gb = {}
+    coarse_assembler = {}
 
     # There is one basis function per coarse degree of freedom
     for coarse_ind, coarse_cc in zip(coarse_cell_ind, coarse_cell_cc.T):
@@ -282,7 +283,8 @@ def cell_basis_functions(reg, local_gb, discr):
         basis_functions[coarse_ind] = x
 
         coarse_gb[coarse_ind] = gb
+        coarse_assembler[coarse_ind] = assembler
         # Move on to the next basis function
 
     # All done
-    return coarse_gb, basis_functions, assembler
+    return coarse_gb, basis_functions, coarse_assembler
