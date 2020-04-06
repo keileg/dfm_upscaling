@@ -24,11 +24,14 @@ class FVDFM(pp.FVElliptic):
 
         # the fracture network that has to be upscaled
         # @Eirik maybe not as an input parameter, let's see
+        # EK: This belongs to the data dictionary that enters the discretize method
         self.micro_network = micro_network
 
     def set_parameters(self, gb):
         """
         Assign parameters for the macro gb
+        
+        EK: This method should not be here - It belongs to the runscript.
 
         Args:
             gb (TYPE): the macroscopic grid bucket.
@@ -71,9 +74,9 @@ class FVDFM(pp.FVElliptic):
     def set_variables_discretizations(self, gb):
         """
 
-        Assign variables, and set discretizations for a micro gb
+        Assign variables, and set discretizations for a macro gb.
         
-        EK: NOTE: This method is called in the construction of local 
+        EK: This method should not be here - It belongs to the runscript.
 
         Args:
             gb (TYPE): the macroscopic grid bucket.
