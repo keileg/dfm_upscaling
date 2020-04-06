@@ -175,23 +175,29 @@ class FVDFM(pp.FVElliptic):
 
         """
 
+        fine_scale_dicsr = pp.Mpfa(self.keyword)
+
         for g, d in gb:
-            cell_discr = self.method(self.keyword)
             d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
-            d[pp.DISCRETIZATION] = {self.cell_variable: {self.cell_discr: cell_discr}}
+            d[pp.DISCRETIZATION] = {
+                self.cell_variable: {self.cell_discr: fine_scale_dicsr}
+            }
             d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
 
         # Loop over the edges in the GridBucket, define primary variables and discretizations
         for e, d in gb.edges():
             g1, g2 = gb.nodes_of_edge(e)
-            method = self.method(self.keyword)
             d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
             # The type of lower-dimensional discretization depends on whether this is a
             # (part of a) fracture, or a transition between two line or surface grids.
             if g1.from_fracture:
-                mortar_discr = pp.RobinCoupling(self.keyword, method, method)
+                mortar_discr = pp.RobinCoupling(
+                    self.keyword, fine_scale_dicsr, fine_scale_dicsr
+                )
             else:
-                mortar_discr = pp.FluxPressureContinuity(self.keyword, method, method)
+                mortar_discr = pp.FluxPressureContinuity(
+                    self.keyword, fine_scale_dicsr, fine_scale_dicsr
+                )
 
             d[pp.COUPLING_DISCRETIZATION] = {
                 self.mortar_discr: {
@@ -218,7 +224,7 @@ class FVDFM(pp.FVElliptic):
         I = []
         J = []
         dataIJ = []
-        
+
         micro_network = parameter_dictionary[self.network_keyword]
 
         # This for-loop could be parallelized. TODO
