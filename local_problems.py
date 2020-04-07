@@ -290,6 +290,19 @@ def cell_basis_functions(reg, local_gb, discr):
         # Move on to the next basis function
 
     # All done
+    # Check if the basis functions form a partition of unity.
+    # NOTE: This makes the tacit assumption that the ordering of the grids is the same
+    # in all assemblers. This is probably true, but it should be the first item to
+    # check if we get an error message here
+    basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
+    for g, _ in assembler.gb:
+        dof = assembler.dof_ind(g, discr.cell_variable)
+        assert np.allclose(basis_sum[dof], 1)
+
+    # Check that the mortar fluxes sum to zero for local problems.
+    for e, _ in assembler.gb.edges():
+        dof = assembler.dof_ind(e, discr.mortar_variable)
+        assert np.allclose(basis_sum[dof], 0)
 
     return basis_functions, coarse_assembler
 
