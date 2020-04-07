@@ -129,7 +129,7 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
             n = pp.map_geometry.compute_normal(sp).reshape((-1, 1))
 
         # Index of points in the plane
-        in_plane = np.where(np.sum(np.abs(vec_cp_p[:spatial_dim] * n), axis=0) < tol)[0]
+        in_plane = np.where(np.abs(np.sum(vec_cp_p[:spatial_dim] * n, axis=0)) < tol)[0]
 
     # Restrict point cloud to the plane
     p_in_plane = p[:, in_plane]
