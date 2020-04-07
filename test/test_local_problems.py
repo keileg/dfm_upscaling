@@ -106,10 +106,11 @@ class TestLocalProblems(unittest.TestCase):
                 )
 
                 # @Eirik not sure the value here
+                # EK: Me neither.
                 # self.assertTrue(np.allclose(np.abs(trm), 1))
                 self.assertTrue(np.allclose(np.sum(trm), 0))
 
-    def test_partition_unit_tpfa_local_micro_fractures(self):
+    def test_partition_unity_tpfa_local_micro_fractures(self):
         g = create_grids.cart_2d()
         p = np.array([[0.8, 1.2, 0.9, 1.2], [1.3, 1.6, 1.7, 1.4]])
         e = np.array([[0, 2], [1, 3]])
@@ -146,7 +147,7 @@ class TestLocalProblems(unittest.TestCase):
                     dof = assembler.dof_ind(e, discr.mortar_variable)
                     self.assertTrue(np.allclose(basis_sum[dof], 0))
 
-    def test_partition_unit_mpfa_local_micro_fractures(self):
+    def test_partition_unity_mpfa_local_micro_fractures(self):
         g = create_grids.cart_2d()
         p = np.array([[0.6, 1.4, 0.9, 1.2], [0.6, 1.1, 1.7, 1.4]])
         e = np.array([[0, 2], [1, 3]])
