@@ -213,6 +213,7 @@ def cell_basis_functions(reg, local_gb, discr):
     basis_functions = {}
     coarse_gb = {}
     coarse_assembler = {}
+    coarse_bc_values = {}
 
     # There is one basis function per coarse degree of freedom
     for coarse_ind, coarse_cc in zip(coarse_cell_ind, coarse_cell_cc.T):
@@ -270,13 +271,15 @@ def cell_basis_functions(reg, local_gb, discr):
                 x = spsolve(A, b)
                 assembler.distribute_variable(x)
 
-                for g, d in gb:
-                    # Reset the boundary conditions in preparation for the next basis
-                    # function
-                    d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
-                    # Store the pressure values to be used as new boundary conditions
-                    # for the problem with one dimension more
-                    new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
+                # Avoid this operation for the highest dimensional gb
+                if gb.dim_max() < local_gb.dim:
+                    for g, d in gb:
+                        # Reset the boundary conditions in preparation for the next basis
+                        # function
+                        d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
+                        # Store the pressure values to be used as new boundary conditions
+                        # for the problem with one dimension more
+                        new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
 
             # We are done with all buckets of this dimension. Redefine the current
             # values to previous values, and move on to the next set of buckets.
@@ -287,6 +290,10 @@ def cell_basis_functions(reg, local_gb, discr):
 
         coarse_gb[coarse_ind] = gb
         coarse_assembler[coarse_ind] = assembler
+        coarse_bc_values[coarse_ind] = {}
+        for g, d in gb:
+            coarse_bc_values[coarse_ind][g] = d[pp.PARAMETERS]["flow"]["bc_values"].copy()
+
         # Move on to the next basis function
 
     # All done
@@ -294,6 +301,7 @@ def cell_basis_functions(reg, local_gb, discr):
     # NOTE: This makes the tacit assumption that the ordering of the grids is the same
     # in all assemblers. This is probably true, but it should be the first item to
     # check if we get an error message here
+    # @Eirik this test is valid only for internal faces, correct?
     basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
     for g, _ in assembler.gb:
         dof = assembler.dof_ind(g, discr.cell_variable)
@@ -304,11 +312,11 @@ def cell_basis_functions(reg, local_gb, discr):
         dof = assembler.dof_ind(e, discr.mortar_variable)
         assert np.allclose(basis_sum[dof], 0)
 
-    return basis_functions, coarse_assembler
+    return basis_functions, coarse_assembler, coarse_bc_values
 
 
 def compute_transmissibilies(
-    reg, local_gb, basis_functions, cc_assembler, coarse_grid, discr
+    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, coarse_grid, discr
 ):
     # Read the mesh file for the micro problem
     mesh = meshio.read(local_gb.file_name + ".msh")
@@ -385,11 +393,14 @@ def compute_transmissibilies(
             # This will be the full Nd grid bucket.
             gb = cc_assembler[cci].gb
 
+            # Set back the boundary conditions used in the computation
+            for g, d in gb:
+                d[pp.PARAMETERS]["flow"]["bc_values"] = cc_bc_values[cci][g]
+
             # Reconstruct fluxes in the grid bucket
             pp.fvutils.compute_darcy_flux(
                 gb, p_name=discr.cell_variable, lam_name=discr.mortar_variable
             )
-
             # Loop over all grids in the grid_bucket.
             for loc_g, d in gb:
 
