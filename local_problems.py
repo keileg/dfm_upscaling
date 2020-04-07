@@ -292,7 +292,9 @@ def cell_basis_functions(reg, local_gb, discr):
         coarse_assembler[coarse_ind] = assembler
         coarse_bc_values[coarse_ind] = {}
         for g, d in gb:
-            coarse_bc_values[coarse_ind][g] = d[pp.PARAMETERS]["flow"]["bc_values"].copy()
+            coarse_bc_values[coarse_ind][g] = d[pp.PARAMETERS]["flow"][
+                "bc_values"
+            ].copy()
 
         # Move on to the next basis function
 
