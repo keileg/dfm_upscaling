@@ -349,11 +349,15 @@ def compute_transmissibilies(
         nc = gs.nodes
 
         # There should be a single face among the constraint nodes (both in 2d and 3d)
-        face_node = np.where([t == "face" for t in reg.constraint_node_type[gi]])[0]
-        assert face_node.size == 1
+        if reg.name == "mpfa":
+            face_node = np.where([t == "face" for t in reg.constraint_node_type[gi]])[0]
+            assert face_node.size == 1
+            # Macro face index
+            cfi = reg.constraints[gi][face_node[0]]
+        else:  # tpfa
+            # For tpfa, the face is identified by the region number
+            cfi = reg.reg_ind
 
-        # Macro face index
-        cfi = reg.constraints[gi][face_node[0]]
         # Macro normal vector of the face
         coarse_normal = coarse_grid.face_normals[:, cfi]
 
