@@ -425,4 +425,10 @@ def compute_transmissibilies(
                         #   pdb.set_trace()
                         debug = []
 
+    # The macro transmissibilities should sum to zero to preserve no flow for constant
+    # pressure
+    trm_sum = np.bincount(coarse_face_ind, weights=trm)
+
+    assert np.allclose(trm_sum, 0)
+
     return coarse_cell_ind, coarse_face_ind, trm
