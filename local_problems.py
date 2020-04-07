@@ -294,7 +294,9 @@ def cell_basis_functions(reg, local_gb, discr):
     return basis_functions, coarse_assembler
 
 
-def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
+def compute_transmissibilies(
+    reg, local_gb, basis_functions, cc_assembler, coarse_grid, discr
+):
     # Read the mesh file for the micro problem
     mesh = meshio.read(local_gb.file_name + ".msh")
 
@@ -315,7 +317,7 @@ def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
     # faces that coincide with a macro face.
     # To identify these micro faces, we recover the micro surface grids. These were
     # present as internal constraints in the local grid bucket.
-    if dim == 2:
+    if coarse_grid.dim == 2:
         # Create all 2d grids that correspond to an auxiliary surface
         g_surf, _ = mesh_2_grid.create_1d_grids(
             pts,
@@ -353,7 +355,7 @@ def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
         # Macro face index
         cfi = reg.constraints[gi][face_node[0]]
         # Macro normal vector of the face
-        coarse_normal = g.face_normals[:, cfi]
+        coarse_normal = coarse_grid.face_normals[:, cfi]
 
         # Loop over all basis functions constructed by the local problem.
         for cci, basis in basis_functions.items():
@@ -364,7 +366,7 @@ def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
 
             # Grid bucket of this local problem.
             # This will be the full Nd grid bucket.
-            gb = cc_assembler.gb
+            gb = cc_assembler[cci].gb
 
             # Reconstruct fluxes in the grid bucket
             pp.fvutils.compute_darcy_flux(
@@ -379,8 +381,8 @@ def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
 
                 if loc_g.dim == gs.dim + 1:
                     # find faces in the matrix grid on the surface
-                    grid_map = local_problems.match_points_on_surface(
-                        cc, loc_g.face_centers, dim, gs.dim
+                    grid_map = match_points_on_surface(
+                        cc, loc_g.face_centers, coarse_grid.dim, gs.dim
                     )
                 elif loc_g.dim == gs.dim:
                     # find fractures that intersect with the surface
@@ -391,8 +393,8 @@ def compute_transmissibilies(local_gb, basis_functions, cc_assembler):
                     # EK: Something goes wrong in this case (fracture crosses the
                     # surface), though not necessarily in this function call. No idea
                     # what is wrong.
-                    grid_map = local_problems.match_points_on_surface(
-                        nc, loc_g.face_centers, dim, gs.dim
+                    grid_map = match_points_on_surface(
+                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim
                     )
                 else:
                     # EK: Not sure what to do here
