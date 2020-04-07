@@ -156,7 +156,7 @@ class FVDFM(pp.FVElliptic):
             # Call method to transfer basis functions to transmissibilties over coarse
             # edges
             ci, fi, trm = local_problems.compute_transmissibilies(
-                gb_set, basis_functions, assemblers
+                reg, gb_set, basis_functions, assemblers, g, self
             )
 
             import pdb
