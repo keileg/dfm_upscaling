@@ -349,6 +349,7 @@ class LocalGridBucketSet:
             g.from_fracture = False
 
         for g in g_1d:
+            g.compute_geometry()
             g.from_fracture = False
 
         # A map from fracture points on the domain boundary to the 0d grids.
@@ -402,6 +403,9 @@ class LocalGridBucketSet:
                 # this is a boundary edge
                 num_ia_edge_vertexes = 2
                 is_boundary_edge = True
+                # Macro face index is found by ia_edge[1]
+                macro_face_ind = ia_edge[1]
+                macro_face_coord = ia_edge_coord[:, -1].reshape((-1, 1))
 
             # All ia_edge vertexes should be found among the boundary points
             if len(domain_pt_ia_edge) != num_ia_edge_vertexes:
@@ -427,11 +431,12 @@ class LocalGridBucketSet:
             # We differ between this and points introduced by the fracture, as the two
             # types of point grids will be assigned different conditions in the flow
             # problem
-            # To get the right grid, first map the midpoint on the ia_edge to the right
-            # boundary point, and then access the dictionary of all boundary point grids
             if is_boundary_edge:
                 edge_grids_0d = []
             else:
+                # To get the right grid, first map the midpoint on the ia_edge to the
+                # boundary point, and then access the dictionary of all boundary point
+                # grids
                 edge_grids_0d = [
                     domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]
                 ]
@@ -506,6 +511,25 @@ class LocalGridBucketSet:
                             # and 3d domains
                             if not g_loc in edge_grids_1d:
                                 edge_grids_1d.append(g_loc)
+
+                        if is_boundary_edge:
+                            min_dist = np.inf
+                            min_grid_ind = -1
+                            min_face_ind = -1
+                            for gi, g_loc in enumerate(edge_grids_1d):
+                                dist = np.sum(
+                                    (g_loc.face_centers - macro_face_coord) ** 2, axis=0
+                                )
+                                min_arg = np.argmin(dist)
+                                if dist[min_arg] < min_dist:
+                                    min_dist = dist[min_arg]
+                                    min_grid_ind = gi
+                                    min_face_ind = min_arg
+
+                            edge_grids_1d[
+                                min_grid_ind
+                            ].face_on_macro_bound = min_face_ind
+                            edge_grids_1d[min_grid_ind].macro_face_ind = macro_face_ind
 
                         # Add all 0d grids to the set of 0d grids along the region edge
                         # This will be fracture points, should inherit properties from
