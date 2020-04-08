@@ -280,6 +280,25 @@ class InteractionRegion:
 
         return np.hstack((min_coord, max_coord))
 
+    def __str__(self) -> str:
+        s = f"Interaction region of type {self.name}\n"
+        if self.name == "tpfa":
+            s += f"Central face: {self.reg_ind}\n"
+        elif self.name == "mpfa":
+            s += f"Central node: {self.reg_ind}\n"
+
+        s += f"Region has:\n"
+        s += f"{self.edges.shape[0]} 1d edges\n"
+        s += f"{self.surfaces.shape[0]} {self.dim - 1} surfaces\n"
+        s += (
+            f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary"
+        )
+
+        return s
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
 
 def extract_tpfa_regions(g: pp.Grid, faces=None):
     """ Define tpfa-type interaction regions for specified faces in a grid.
