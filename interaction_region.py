@@ -300,23 +300,20 @@ class InteractionRegion:
         return self.__str__()
 
 
-def extract_tpfa_regions(g: pp.Grid, faces=None):
-    """ Define tpfa-type interaction regions for specified faces in a grid.
+def extract_tpfa_regions(
+    g: pp.Grid, faces: np.ndarray = None
+) -> List[InteractionRegion]:
+    """ Factory method to define tpfa-type interaction regions for specified faces in a
+    grid.
 
     Parameters:
         g (pp.Grid): Grid where interaction regions will be found
-        faces (int or np.array, optional): Index of faces for which the regions will be found.
-            If not provided, all faces will have their region computed.
+        faces (int or np.array, optional): Index of faces for which the regions will be
+            found. If not provided, all faces in the gridwill have their region
+            computed.
 
     Returns:
-        list of np.ndarray: Each list element contains the interaction region
-            for one of the specified faces. The array is n x 3, each row defines
-            a boundary face in the interaction region, by refering to indexes in
-            the grid.
-        np.array: Index of the faces in the order used in the first return value.
-            Identical to the face array parameter if this is provided.
-        tuple of str, length 3: Inform which type of indices the columns in the
-            index array referes to. Gives values 'cell' and 'node'.
+        List of InteractionRegion: One per face in faces.
 
     """
 
@@ -445,7 +442,22 @@ def extract_tpfa_regions(g: pp.Grid, faces=None):
     return region_list
 
 
-def extract_mpfa_regions(g: pp.Grid, nodes=None):
+def extract_mpfa_regions(
+    g: pp.Grid, nodes: np.ndarray = None
+) -> List[InteractionRegion]:
+    """ Factory method to define mpfa-type interaction regions for specified faces in a
+    grid.
+
+    Parameters:
+        g (pp.Grid): Grid where interaction regions will be found
+        nodes (int or np.array, optional): Index of nodes for which the regions will be
+            found. If not provided, all nodes in the grid will have their region
+            computed.
+
+    Returns:
+        List of InteractionRegion: One per node in nodes.
+
+    """
 
     if g.dim < 2:
         raise ValueError("Implementation is only valid for 2d and 3d")
@@ -462,57 +474,61 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
 
     region_list = []
 
-    cn = g.cell_nodes().tocsr()
     fn = g.face_nodes.tocsr()
 
     for ni in nodes:
 
-        loc_cells = cn[ni].indices
+        # Faces of this node
         loc_faces = fn[ni].indices
-        nc = loc_cells.size
-        nf = loc_faces.size
 
-        on_boundary = np.any(cell_faces[:, loc_faces] < 0)
-
-        loc_cells_unique_ind_glob = -np.ones(g.num_cells, dtype=np.int)
-        loc_cells_unique_ind_glob[loc_cells] = np.arange(nc, dtype=np.int)
-
-        loc_faces_unique_ind_glob = -np.ones(g.num_faces, dtype=np.int)
-        loc_faces_unique_ind_glob[loc_faces] = nc + np.arange(nf, dtype=np.int)
-
-        tmp_edges = []
-        edge_node_type = []
+        # Data structure to store local information
+        tmp_edges = []  # 1d edges
+        edge_node_type = []  # Node type for the edges
+        tmp_surfaces = []
         surface_node_type = []
         surface_is_boundary = []
-
         constraints = []
         constraints_node_type = []
 
-        if g.dim == 2:
-            tmp_surfaces = []
-
-        else:
-            tmp_surfaces = []
+        if g.dim == 3:
+            # In 3d, the boundary of the interaction region will be formed by triangles
+            # composed of cell centers, face centers and points on 1d edges in the grid.
+            # The latter group is not represented in the grid structure, so we recover
+            # these, represented by the index of the other node (not ni) of the edge.
+            # Also find all nodes sharing that edge
             other_node, face_of_edge = _find_edges(g, loc_faces, ni)
 
+        # Loop over all local faces. For each of these, we will first construct the 1d
+        # edge to the adjacent cell center (if face on boundary) or centers (if face is
+        # interior). Second, construct the part of the region boundary surfaces that
+        # involves the face. Third, we need to register the part of coarse faces that
+        # are inside the regions; these will be used as constraints in the gridding of
+        # the region.
         for fi in loc_faces:
-            # If we're on a boundary, this will lead to trouble here
+            # First the 1d edge. Construction here is the same in 2d and 3d.
             if np.any(cell_faces[:, fi] < 0):
-                boundary_face = True
                 # This is a boundary face
-                edge_node_type.append(("cell", "face"))
+                boundary_face = True
+                # Find index of the adjacent cell
                 if cell_faces[0, fi] < 0:
                     ci = cell_faces[1, fi]
                 else:
                     ci = cell_faces[0, fi]
+                # 1d edge from cell to face center
                 tmp_edges.append(np.array([ci, fi]))
+                edge_node_type.append(("cell", "face"))
             else:
+                # Not a boundary edge
                 boundary_face = False
+                # Edge from cell, via face to next cell
                 tmp_edges.append(np.array([cell_faces[0, fi], fi, cell_faces[1, fi]]))
                 edge_node_type.append(("cell", "face", "cell"))
 
+            # Next, part of the boundary of the region. This is quite a bit different
+            # from 2d to 3d.
             if g.dim == 2:
                 if boundary_face:
+                    # One part of the boundary is identical to the 1d edge
                     tmp_surfaces.append(np.array([ci, fi]))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
@@ -520,12 +536,14 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                     # Add another surface from this face to the central node
                     tmp_surfaces.append(np.array([fi, ni]))
                     surface_node_type.append(("face", "node"))
+                    # This will be a boundary surface
                     surface_is_boundary.append(True)
 
                     # No need to append constraints for the boundary, this will be
                     # represented in the local grid anyhow
 
                 else:
+                    # The region surface consists of the two parts of the 1d edge
                     tmp_surfaces.append((cell_faces[0, fi], fi))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
@@ -534,20 +552,22 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
 
-                    # This half-face should form a constraint for the meshing
+                    # The part of this face that is within the region will be a
+                    # constraint for subsequent meshing.
                     constraints.append((fi, ni))
                     constraints_node_type.append(("face", "node"))
 
             else:  # g.dim == 3
-                edge_ind_this_face = other_node[face_of_edge == fi]
-
+                # Adjacent cells
                 if boundary_face:
                     ci = np.array([ci])
                 else:
                     ci = cell_faces[:, fi]
 
-                for ei in edge_ind_this_face:
+                # Loop over all edges of this face
+                for ei in other_node[face_of_edge == fi]:
                     for c in ci:
+                        # The boundary surface of the region
                         tmp_surfaces.append((c, fi, ei))
                         surface_node_type.append(("cell", "face", "edge"))
                         surface_is_boundary.append(False)
@@ -558,6 +578,8 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
                         surface_node_type.append(("face", "edge", "node"))
                         surface_is_boundary.append(True)
 
+                        # No need to define a constraint related to this edge
+
                     else:
                         # If this is not a boundary, the face must still be explicitly
                         # resolved in the mesh
@@ -566,18 +588,15 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
 
             # End of loop over faces
 
-        # Bounding edges of the interaction region
-        edges = np.array(tmp_edges)
-        surfaces = np.array(tmp_surfaces)
-
+        # Create ia_reg based on the information.
         reg = InteractionRegion(
             g,
             "mpfa",
             ni,
-            surfaces,
+            np.array(tmp_surfaces),
             surface_node_type,
             surface_is_boundary,
-            edges,
+            np.array(tmp_edges),
             edge_node_type,
             constraints,
             constraints_node_type,
@@ -589,32 +608,63 @@ def extract_mpfa_regions(g: pp.Grid, nodes=None):
     return region_list
 
 
-def _find_edges(g, loc_faces, central_node):
+def _find_edges(
+    g: pp.Grid, loc_faces: np.ndarray, central_node: int
+) -> Union[np.ndarray, np.ndarray]:
+    """
+    Find the 1d edges around a central node in a 3d grid.
+
+    Args:
+        g (pp.Grid): Macro grid.
+        loc_faces (np.ndarray): Index of faces that have central_node among their
+            vertexes.
+        central_node (int): Index of the central node.
+
+    Returns:
+        nodes_on_edges (np.ndarray): Index of nodes that form a 1d edge together with
+            the central node.
+        face_of_edges (np.ndarray): Faces corresponding to the edge.
+
+    Raises:
+        ValueError: If not all faces in the grid have the same number of nodes.
+
+    """
 
     fn_loc = g.face_nodes[:, loc_faces]
     node_ind = fn_loc.indices
     fn_ptr = fn_loc.indptr
 
     if not np.unique(np.diff(fn_ptr)).size == 1:
-        ValueError("Have not implemented grids with varying number of face-nodes")
+        # Fixing this should not be too hard
+        raise ValueError("Have not implemented grids with varying number of face-nodes")
 
+    # Number of nodes per face
     num_fn = np.unique(np.diff(fn_ptr))[0]
 
+    # Sort the nodes of the local faces.
     sort_ind = np.argsort(node_ind)
+    # The elements in sorted_node_ind (and node_ind) will not be unique
     sorted_node_ind = node_ind[sort_ind]
 
+    # Duplicate the face indices, and make the same sorting as for the nodes
     face_ind = np.tile(loc_faces, (num_fn, 1)).ravel(order="f")
     sorted_face_ind = face_ind[sort_ind]
 
+    # Exclude nodes and faces that correspond to the central node
     not_central_node = np.where(sorted_node_ind != central_node)[0]
-
     sorted_node_ind_ext = sorted_node_ind[not_central_node]
     sorted_face_ind_ext = sorted_face_ind[not_central_node]
 
+    # Nodes that occur more than once are part of at least two faces, thus there is an
+    # edge going from the central to that other node
+    # This may not be true for sufficiently degenerated grids (not sure what that means,
+    # possibly something with hanging nodes).
     multiple_occur = np.where(np.bincount(sorted_node_ind_ext) > 1)[0]
-
     hit = np.in1d(sorted_node_ind_ext, multiple_occur)
 
+    # Edges (represented by the node that is not the central one), and the faces of the
+    # edges. Note that neither nodes_on_edges nor face_of_edges are unique, however, the
+    # combination of an edge and a face should be so.
     nodes_on_edges = sorted_node_ind_ext[hit]
     face_of_edges = sorted_face_ind_ext[hit]
 
