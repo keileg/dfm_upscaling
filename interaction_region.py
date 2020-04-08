@@ -25,6 +25,7 @@ class InteractionRegion:
         edge_node_type: List[Tuple[str]],
         constraints: List[Tuple[int]],
         constraint_node_type: List[Tuple[str]],
+        macro_face_of_boundary_surface,
     ) -> None:
 
         self.g = g
@@ -40,6 +41,8 @@ class InteractionRegion:
         self.edge_node_type = edge_node_type
         self.constraints = constraints
         self.constraint_node_type = constraint_node_type
+
+        self.macro_face_of_boundary_surface = macro_face_of_boundary_surface
 
         if self.dim == 2:
             self.fracture_pts = np.zeros((3, 0))
@@ -329,7 +332,9 @@ def extract_tpfa_regions(
     # Data structure for the output
     region_list = []
 
-    # The interaction region consists of
+    # For region surfaces that are on the boundary, we store the face index of the
+    # corresponding face in the macro grid.
+    macro_face_of_surface = []
 
     # For TPFA, the interaction regions are centered on the faces in the coarse grid
     # Loop over all specified faces, find their interaction region
@@ -365,10 +370,13 @@ def extract_tpfa_regions(
                 tri.append((ci, nodes[0]))
                 surface_node_type.append(("cell", "node"))
                 surface_is_boundary.append(False)
+                macro_face_of_surface.append([])
 
                 tri.append((ci, nodes[1]))
                 surface_node_type.append(("cell", "node"))
                 surface_is_boundary.append(False)
+                macro_face_of_surface.append([])
+
             else:
                 for ni in range(nodes.size):
                     # The face of the interaction region consists of one cell
@@ -376,6 +384,7 @@ def extract_tpfa_regions(
                     tri.append((ci, nodes_extended[ni], nodes_extended[ni + 1]))
                     surface_node_type.append(("cell", "node", "node"))
                     surface_is_boundary.append(False)
+                    macro_face_of_surface.append([])
 
         for n in nodes:
             if on_boundary:
@@ -395,14 +404,18 @@ def extract_tpfa_regions(
                     tri.append(nodes)
                     surface_node_type.append(("node", "node", "node"))
                     surface_is_boundary.append(True)
+                    macro_face_of_surface.append(fi)
                 elif nodes.size == 4:
                     tri.append(nodes[:3])
                     surface_node_type.append(("node", "node", "node"))
                     surface_is_boundary.append(True)
+                    macro_face_of_surface.append(fi)
 
                     tri.append((nodes[0], nodes[2], nodes[3]))
                     surface_node_type.append(("node", "node", "node"))
                     surface_is_boundary.append(True)
+                    macro_face_of_surface.append(fi)
+
                 else:
                     raise ValueError(
                         "Implementation only covers simplexes and Cartisan coarse grids"
@@ -432,6 +445,7 @@ def extract_tpfa_regions(
             edge_node_type,
             constraints,
             constraint_node_type,
+            macro_face_of_surface,
         )
 
         region_list.append(reg)
@@ -488,6 +502,10 @@ def extract_mpfa_regions(
         constraints = []
         constraints_node_type = []
 
+        # For region surfaces that are on the boundary, we store the face index of the
+        # corresponding face in the macro grid.
+        macro_face_of_surface = []
+
         if g.dim == 3:
             # In 3d, the boundary of the interaction region will be formed by triangles
             # composed of cell centers, face centers and points on 1d edges in the grid.
@@ -530,12 +548,14 @@ def extract_mpfa_regions(
                     tmp_surfaces.append(np.array([ci, fi]))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
+                    macro_face_of_surface.append([])
 
                     # Add another surface from this face to the central node
                     tmp_surfaces.append(np.array([fi, ni]))
                     surface_node_type.append(("face", "node"))
                     # This will be a boundary surface
                     surface_is_boundary.append(True)
+                    macro_face_of_surface.append(fi)
 
                     # No need to append constraints for the boundary, this will be
                     # represented in the local grid anyhow
@@ -545,10 +565,12 @@ def extract_mpfa_regions(
                     tmp_surfaces.append((cell_faces[0, fi], fi))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
+                    macro_face_of_surface.append([])
 
                     tmp_surfaces.append((cell_faces[1, fi], fi))
                     surface_node_type.append(("cell", "face"))
                     surface_is_boundary.append(False)
+                    macro_face_of_surface.append([])
 
                     # The part of this face that is within the region will be a
                     # constraint for subsequent meshing.
@@ -569,12 +591,14 @@ def extract_mpfa_regions(
                         tmp_surfaces.append((c, fi, ei))
                         surface_node_type.append(("cell", "face", "edge"))
                         surface_is_boundary.append(False)
+                        macro_face_of_surface.append([])
 
                     if boundary_face:
                         # This face also is part of the local boundary
                         tmp_surfaces.append((fi, ei, ni))
                         surface_node_type.append(("face", "edge", "node"))
                         surface_is_boundary.append(True)
+                        macro_face_of_surface.append(fi)
 
                         # No need to define a constraint related to this edge
 
@@ -598,7 +622,7 @@ def extract_mpfa_regions(
             edge_node_type,
             constraints,
             constraints_node_type,
-            central_node=ni,
+            macro_face_of_surface,
         )
 
         region_list.append(reg)
