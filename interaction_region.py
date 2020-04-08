@@ -25,7 +25,6 @@ class InteractionRegion:
         edge_node_type: List[Tuple[str]],
         constraints: List[Tuple[int]],
         constraint_node_type: List[Tuple[str]],
-        central_node: int = None,
     ) -> None:
 
         self.g = g
@@ -48,9 +47,8 @@ class InteractionRegion:
         else:
             self.fractures: List[pp.Fractures] = []
 
-        if central_node is not None:
-            self.node_ind: int = central_node
-            self.node_coord = g.nodes[:, central_node].reshape((-1, 1))
+        if name == "mpfa":
+            self.node_coord = g.nodes[:, reg_ind].reshape((-1, 1))
 
     ####################
     ## Functions related to meshing of fracture networks
