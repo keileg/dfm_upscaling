@@ -10,7 +10,7 @@ import numpy as np
 import porepy as pp
 import meshio
 
-from scipy.sparse.linalg import spsolve
+import scipy.sparse as sps
 from porepy.grids.constants import GmshConstants
 from porepy.grids.gmsh import mesh_2_grid
 
@@ -145,10 +145,8 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
     )
 
     num_occ = np.bincount(mapping)
-    # If this brakes, the geometric tolerance is too loose
-    assert num_occ.max() <= 2
-    # Find coordinates repeated twice
-    matches = np.where(num_occ == 2)[0]
+    # Find coordinates repeated twice or more
+    matches = np.where(num_occ >= 2)[0]
 
     pairs = []
 
@@ -161,9 +159,11 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
         # One of the matches should be on the previous grid
         # If we get an error here, it is likely because two fractures cross at an
         # auxiliary surface (at least this is the likely cause at the time of writing)
-        assert hit[1] >= num_surf_pts
+        assert np.all(hit[1:] >= num_surf_pts)
 
-        pairs.append([hit[0], in_plane[hit[1] - num_surf_pts]])
+        # Store all the possible pairs that are matching at the interface
+        for h in hit[1:]:
+            pairs.append([hit[0], in_plane[h - num_surf_pts]])
 
     return pairs
 
@@ -268,7 +268,7 @@ def cell_basis_functions(reg, local_gb, discr):
                 A, b = assembler.assemble_matrix_rhs()
 
                 # Solve and distribute
-                x = spsolve(A, b)
+                x = sps.linalg.spsolve(A, b)
                 assembler.distribute_variable(x)
 
                 # Avoid this operation for the highest dimensional gb
@@ -406,8 +406,32 @@ def compute_transmissibilies(
             # Loop over all grids in the grid_bucket.
             for loc_g, d in gb:
 
-                # Flux field for this problem
-                full_flux = d[pp.PARAMETERS][discr.keyword]["darcy_flux"]
+                # ATTENZIONE I NOMI DELLE VARIABILI DEVONO ESSERE FATTI MEGLIO
+
+                # Flux field for this problem of this grid
+                grid_flux = d[pp.PARAMETERS][discr.keyword]["darcy_flux"]
+
+                # Flux field for this problem due to the mortar variables
+                edge_flux = np.zeros(grid_flux.size)
+                if np.any(loc_g.tags["fracture_faces"]):
+                    # Recover the sign of the flux, since the mortar is assumed
+                    # to point from the higher to the lower dimensional problem
+                    _, indices = np.unique(loc_g.cell_faces.indices, return_index=True)
+                    sign = sps.diags(loc_g.cell_faces.data[indices], 0)
+
+                    for _, d_e in gb.edges_of_node(loc_g):
+                        g_m = d_e["mortar_grid"]
+                        # Consider only the higher dimensional case
+                        if g_m.dim == loc_g.dim:
+                            continue
+                        # Project the mortar variable back to the higher dimensional
+                        # problem
+                        edge_flux += (
+                            sign * g_m.master_to_mortar_avg().T * d_e[pp.STATE]["mortar_flux"]
+                        )
+
+                # Construct the full flux
+                full_flux = grid_flux + edge_flux
 
                 if loc_g.dim == gs.dim + 1:
                     # find faces in the matrix grid on the surface
@@ -423,14 +447,21 @@ def compute_transmissibilies(
                     # EK: Something goes wrong in this case (fracture crosses the
                     # surface), though not necessarily in this function call. No idea
                     # what is wrong.
+                    # @Eirik, is it still true this comment?
                     grid_map = match_points_on_surface(
                         nc, loc_g.face_centers, coarse_grid.dim, gs.dim
                     )
                 else:
-                    # EK: Not sure what to do here
-                    # We may drop this alternative for a while, but it will in effect
-                    # correspond to basis functions that are not a partition of unity.
-                    raise NotImplementedError("Have not gotten this far")
+                    # @Eirik, why not using the same procedure? This might be okay for 0d grid in 2d
+                    # it's anyway zero the flux in that case
+                    grid_map = match_points_on_surface(
+                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim
+                    )
+
+                    ### EK: Not sure what to do here
+                    ### We may drop this alternative for a while, but it will in effect
+                    ### correspond to basis functions that are not a partition of unity.
+                    ##raise NotImplementedError("Have not gotten this far")
 
                 # If we found any matches, loop over all micro faces, sum the fluxes,
                 # possibly with an adjustment of the flux direction.
