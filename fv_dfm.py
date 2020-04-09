@@ -40,21 +40,17 @@ class FVDFM(pp.FVElliptic):
 
         # First initialize data
         for g, d in gb:
+            domain_boundary = np.logical_and(
+                g.tags["domain_boundary_faces"],
+                np.logical_not(g.tags["fracture_faces"]),
+            )
 
-            param = {}
-
-            if g.dim == gb.dim_max():
-                domain_boundary = np.logical_and(
-                    g.tags["domain_boundary_faces"],
-                    np.logical_not(g.tags["fracture_faces"]),
-                )
-
-                boundary_faces = np.where(domain_boundary)[0]
+            boundary_faces = np.where(domain_boundary)[0]
+            if domain_boundary.size > 0:
                 bc_type = boundary_faces.size * ["dir"]
-
-                bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
-                param["bc"] = bc
-
+            else:
+                bc_type = np.empty(0)
+            param = {"bc": pp.BoundaryCondition(g, boundary_faces, bc_type)}
             pp.initialize_default_data(g, d, self.keyword, param)
 
         for e, d in gb.edges():
