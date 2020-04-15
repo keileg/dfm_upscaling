@@ -168,7 +168,7 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
     return pairs
 
 
-def cell_basis_functions(reg, local_gb, discr):
+def cell_basis_functions(reg, local_gb, discr, macro_data):
     """
     Calculate basis function related to coarse cells for an interaction region
 
@@ -193,7 +193,7 @@ def cell_basis_functions(reg, local_gb, discr):
             # The parameter definition should become much more general at some point
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
-            discr.set_parameters_cell_basis(gb)
+            discr.set_parameters_cell_basis(gb, macro_data['bc'])
             discr.set_variables_discretizations_cell_basis(gb)
 
             # Create an Assembler and discretized the specified problem. The parameters

@@ -26,7 +26,7 @@ class FVDFM(pp.FVElliptic):
         # method for the discretization (tpfa or mpfa so far)
         self.method = None
 
-    def set_parameters_cell_basis(self, gb):
+    def set_parameters_cell_basis(self, gb, macro_bc):
         """
         Assign parameters for the micro gb. Very simple for now, this must be improved.
 
@@ -50,7 +50,16 @@ class FVDFM(pp.FVElliptic):
                 bc_type = boundary_faces.size * ["dir"]
             else:
                 bc_type = np.empty(0)
-            param = {"bc": pp.BoundaryCondition(g, boundary_faces, bc_type)}
+
+            micro_bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
+            if hasattr(g, "face_on_macro_bound"):
+                micro_ind = g.face_on_macro_bound
+                macro_ind = g.macro_face_ind
+
+                micro_bc.is_neu[micro_ind] = macro_bc.is_neu[macro_ind]
+                micro_bc.is_dir[micro_ind] = macro_bc.is_dir[macro_ind]
+
+            param = {"bc": micro_bc}
             pp.initialize_default_data(g, d, self.keyword, param)
 
         for e, d in gb.edges():
