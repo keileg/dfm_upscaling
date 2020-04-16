@@ -41,7 +41,7 @@ class LocalGridBucketSet:
         elif self.dim == 3:
             self._construct_buckets_3d()
 
-        self._tag_faces_macro_boundary()
+        self._tag_faces_macro_boundary(self.gb)
 
     def _construct_buckets_2d(self):
 
@@ -404,9 +404,6 @@ class LocalGridBucketSet:
                 # this is a boundary edge
                 num_ia_edge_vertexes = 2
                 is_boundary_edge = True
-                # Macro face index is found by ia_edge[1]
-                macro_face_ind = ia_edge[1]
-                macro_face_coord = ia_edge_coord[:, -1].reshape((-1, 1))
 
             # All ia_edge vertexes should be found among the boundary points
             if len(domain_pt_ia_edge) != num_ia_edge_vertexes:
@@ -513,25 +510,6 @@ class LocalGridBucketSet:
                             if not g_loc in edge_grids_1d:
                                 edge_grids_1d.append(g_loc)
 
-                        if is_boundary_edge:
-                            min_dist = np.inf
-                            min_grid_ind = -1
-                            min_face_ind = -1
-                            for gi, g_loc in enumerate(edge_grids_1d):
-                                dist = np.sum(
-                                    (g_loc.face_centers - macro_face_coord) ** 2, axis=0
-                                )
-                                min_arg = np.argmin(dist)
-                                if dist[min_arg] < min_dist:
-                                    min_dist = dist[min_arg]
-                                    min_grid_ind = gi
-                                    min_face_ind = min_arg
-
-                            edge_grids_1d[
-                                min_grid_ind
-                            ].face_on_macro_bound = min_face_ind
-                            edge_grids_1d[min_grid_ind].macro_face_ind = macro_face_ind
-
                         # Add all 0d grids to the set of 0d grids along the region edge
                         # This will be fracture points, should inherit properties from
                         # the fracture.
@@ -560,6 +538,9 @@ class LocalGridBucketSet:
             buckets_1d.append(gb_edge)
 
         # Store all edge buckets for this region
+        for gb in buckets_1d:
+            self._tag_faces_macro_boundary(gb)
+
         self.line_gb = buckets_1d
 
     def _recover_surface_gb(self, network, file_name):
@@ -787,6 +768,9 @@ class LocalGridBucketSet:
             surface_buckets.append(gb_loc)
 
         # Done!
+        for gb in surface_buckets:
+            self._tag_faces_macro_boundary(gb)
+
         self.surface_gb = surface_buckets
 
     def _match_points(self, p1, p2):
@@ -832,7 +816,7 @@ class LocalGridBucketSet:
 
         return indices
 
-    def _tag_faces_macro_boundary(self) -> None:
+    def _tag_faces_macro_boundary(self, gb: pp.GridBucket) -> None:
         """
         In the main GridBucket, tag faces that coincide with the boundary of the macro
         domain.
@@ -847,7 +831,7 @@ class LocalGridBucketSet:
         # of both the faces on the micro boundaries, and the corresponding macro face.
         micro_map: Dict[pp.Grid, np.ndarray] = {}
         macro_map: Dict[pp.Grid, np.ndarray] = {}
-        for g, _ in self.gb:
+        for g, _ in gb:
             micro_map[g] = np.array([], dtype=np.int)
             macro_map[g] = np.array([], dtype=np.int)
 
@@ -866,7 +850,7 @@ class LocalGridBucketSet:
                 pts = np.hstack((pts, reg._coord(node, ind)))
 
             # Loop over all grids in the main gb, and look for faces on the surface.
-            for g, _ in self.gb:
+            for g, _ in gb:
                 # Grids of co-dimension > 1 will not be assigned a bc on the macro
                 # boundary
                 if g.dim < reg.dim - 1:
@@ -903,7 +887,7 @@ class LocalGridBucketSet:
         # domain. The information can safely be stored (had we done this in the above
         # loop over surfaces, we would have risked overwriting information on different
         # surfaces).
-        for g, _ in self.gb:
+        for g, _ in gb:
             macro_ind = macro_map[g]
             micro_ind = micro_map[g]
             if len(macro_ind) > 0:
