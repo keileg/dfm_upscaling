@@ -281,6 +281,32 @@ class InteractionRegion:
 
         return np.hstack((min_coord, max_coord))
 
+    def macro_boundary_faces(self) -> List[int]:
+        """
+        Find the macro index of faces on the boundary of the macro domain.
+
+        Returns:
+            list of int: Index of the macro faces that are in this region, and is a
+                domain boundary.
+
+        """
+        bf: List[int] = []
+        for surf, node_type, is_bound in zip(
+            self.surfaces, self.surface_node_type, self.surface_is_boundary
+        ):
+            # If this is not a boundary surface, we can continue
+            if not is_bound:
+                continue
+
+            # If tpfa, there will be a single boundary face, identified by the region
+            # index
+            if self.name == "tpfa":
+                bf.append(self.reg_ind)
+            else:  # mpfa
+                bf.append(surf[node_type.index("face")])
+
+        return bf
+
     def __str__(self) -> str:
         s = f"Interaction region of type {self.name}\n"
         if self.name == "tpfa":

@@ -193,7 +193,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             # The parameter definition should become much more general at some point
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
-            discr.set_parameters_cell_basis(gb, macro_data['bc'])
+            discr.set_parameters_cell_basis(gb, macro_data["bc"])
             discr.set_variables_discretizations_cell_basis(gb)
 
             # Create an Assembler and discretized the specified problem. The parameters
@@ -299,20 +299,26 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
         # Move on to the next basis function
 
     # All done
-    # Check if the basis functions form a partition of unity.
+    # Check if the basis functions form a partition of unity, but only for internal
+    # faces, or for purely Neumann boundaries.
+    check_basis = True
+    for bi in reg.macro_boundary_faces():
+        if macro_data["bc"].is_dir[bi]:
+            check_basis = False
+
     # NOTE: This makes the tacit assumption that the ordering of the grids is the same
     # in all assemblers. This is probably true, but it should be the first item to
     # check if we get an error message here
-    # @Eirik this test is valid only for internal faces, correct?
-    basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
-    for g, _ in assembler.gb:
-        dof = assembler.dof_ind(g, discr.cell_variable)
-        assert np.allclose(basis_sum[dof], 1)
+    if check_basis:
+        basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
+        for g, _ in assembler.gb:
+            dof = assembler.dof_ind(g, discr.cell_variable)
+            assert np.allclose(basis_sum[dof], 1)
 
-    # Check that the mortar fluxes sum to zero for local problems.
-    for e, _ in assembler.gb.edges():
-        dof = assembler.dof_ind(e, discr.mortar_variable)
-        assert np.allclose(basis_sum[dof], 0)
+        # Check that the mortar fluxes sum to zero for local problems.
+        for e, _ in assembler.gb.edges():
+            dof = assembler.dof_ind(e, discr.mortar_variable)
+            assert np.allclose(basis_sum[dof], 0)
 
     return basis_functions, coarse_assembler, coarse_bc_values
 
@@ -427,7 +433,9 @@ def compute_transmissibilies(
                         # Project the mortar variable back to the higher dimensional
                         # problem
                         edge_flux += (
-                            sign * g_m.master_to_mortar_avg().T * d_e[pp.STATE]["mortar_flux"]
+                            sign
+                            * g_m.master_to_mortar_avg().T
+                            * d_e[pp.STATE]["mortar_flux"]
                         )
 
                 # Construct the full flux
