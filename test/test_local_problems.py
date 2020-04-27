@@ -126,6 +126,7 @@ class TestLocalProblems(unittest.TestCase):
 
     def test_transmissibility_tpfa_no_micro_fractures(self):
         g = create_grids.cart_2d()
+        macro_bc = pp.BoundaryCondition(g)
         discr = Tpfa_DFM()
         internal_faces = [1, 4, 7, 11, 12, 13, 14]
         for reg in discr._interaction_regions(g):
@@ -135,11 +136,11 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, cc_bc_values = lp.cell_basis_functions(
-                    reg, local_gb, discr
+                    reg, local_gb, discr, {'bc': macro_bc}
                 )
 
                 _, _, trm = lp.compute_transmissibilies(
-                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr
+                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr, {'bc': macro_bc}
                 )
 
                 self.assertTrue(np.allclose(np.abs(trm), 1))
@@ -149,6 +150,7 @@ class TestLocalProblems(unittest.TestCase):
         g = create_grids.cart_2d()
         discr = Mpfa_DFM()
         internal_nodes = [4, 7]
+        macro_bc = pp.BoundaryCondition(g)
         for reg in discr._interaction_regions(g):
             # consider only the internal nodes
             if np.all(np.isin(reg.reg_ind, internal_nodes)):
@@ -156,11 +158,11 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, cc_bc_values = lp.cell_basis_functions(
-                    reg, local_gb, discr
+                    reg, local_gb, discr, {'bc': macro_bc}
                 )
 
                 _, _, trm = lp.compute_transmissibilies(
-                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr
+                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr, {'bc': macro_bc}
                 )
 
                 # @Eirik not sure the value here
@@ -169,6 +171,7 @@ class TestLocalProblems(unittest.TestCase):
                 self.assertTrue(np.allclose(np.sum(trm), 0))
 
     def _check_partition_unity(self, g, where, discr, pts=None, edges=None):
+        macro_bc = pp.BoundaryCondition(g)
         for reg in discr._interaction_regions(g):
             # consider only the internal faces
             if np.all(np.isin(reg.reg_ind, where)):
@@ -179,7 +182,7 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, _ = lp.cell_basis_functions(
-                    reg, local_gb, discr
+                    reg, local_gb, discr, {'bc': macro_bc}
                 )
 
                 # the assembler is the same for both
