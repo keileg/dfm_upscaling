@@ -324,7 +324,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
 
 
 def compute_transmissibilies(
-    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, coarse_grid, discr
+    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, coarse_grid, discr, macro_data
 ):
     # Read the mesh file for the micro problem
     mesh = meshio.read(local_gb.file_name + ".msh")
@@ -496,8 +496,18 @@ def compute_transmissibilies(
 
     # The macro transmissibilities should sum to zero to preserve no flow for constant
     # pressure
-    trm_sum = np.bincount(coarse_face_ind, weights=trm)
+    # Check if the basis functions form a partition of unity, but only for internal
+    # faces, or for purely Neumann boundaries.
+    check_trm = True
+    for bi in reg.macro_boundary_faces():
+        if macro_data["bc"].is_dir[bi]:
+            check_trm = False
 
-    assert np.allclose(trm_sum, 0)
+    # NOTE: This makes the tacit assumption that the ordering of the grids is the same
+    # in all assemblers. This is probably true, but it should be the first item to
+    # check if we get an error message here
+    if check_trm:
+        trm_sum = np.bincount(coarse_face_ind, weights=trm)
+        assert np.allclose(trm_sum, 0)
 
     return coarse_cell_ind, coarse_face_ind, trm
