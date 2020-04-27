@@ -567,7 +567,7 @@ class LocalGridBucketSet:
         gmsh_constants = GmshConstants()
 
         # Create all 2d grids that correspond to a domain boundary
-        g_2d = mesh_2_grid.create_2d_grids(
+        g_2d_all = mesh_2_grid.create_2d_grids(
             pts,
             mesh.cells,
             phys_names,
@@ -576,6 +576,14 @@ class LocalGridBucketSet:
             network=network,
             surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
         )
+
+        index_offset = min([g.frac_num for g in g_2d_all])
+
+        g_2d = [
+            g
+            for g in g_2d_all
+            if not self.reg.surface_is_boundary[g.frac_num - index_offset]
+        ]
 
         # Map form the frac_num (which by construction in pp.mesh_2_grid will correspond
         # to the number part of the gmsh physical name of the surface polygon) to the
@@ -710,6 +718,8 @@ class LocalGridBucketSet:
 
         # Loop over the surface grids, find its embedded lower-dimensional grids
         for si in np.where(network.tags["boundary"])[0]:
+            if self.reg.surface_is_boundary[si - index_offset]:
+                continue
             g_surf = g_2d_map[si]
 
             # 1d fracture grids are available from the network decomposition
