@@ -15,6 +15,7 @@ from typing import Dict
 from porepy.utils.setmembership import unique_columns_tol
 from porepy.grids.gmsh import mesh_2_grid
 from porepy.grids.constants import GmshConstants
+from porepy.fracs import simplex
 
 from dfm_upscaling import interaction_region as ia_reg
 
@@ -289,21 +290,16 @@ class LocalGridBucketSet:
         """
         decomp = network.decomposition
         # Recover the full description of the gmsh mesh
-        mesh = meshio.read(file_name + ".msh")
-
-        # Invert the meshio field_data so that phys_names maps from the tags that gmsh
-        # assigns to XXX, to the physical names
-        phys_names = {v[0]: k for k, v in mesh.field_data.items()}
-
-        pts = mesh.points
+        
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + '.msh')
 
         gmsh_constants = GmshConstants()
         # Create all 1d grids that correspond to a domain boundary
         g_1d = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
             return_fracture_tips=False,
         )
@@ -315,9 +311,9 @@ class LocalGridBucketSet:
         # create all, and then dump those not needed.
         g_0d_domain_boundary = mesh_2_grid.create_0d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_BOUNDARY_POINT,
         )
         # Create a mapping from the domain boundary points to the 0d grids
@@ -332,9 +328,9 @@ class LocalGridBucketSet:
         # edge of a domain
         g_0d_frac_bound = mesh_2_grid.create_0d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
         fracture_boundary_points = np.where(

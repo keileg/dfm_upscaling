@@ -13,6 +13,7 @@ import meshio
 import scipy.sparse as sps
 from porepy.grids.constants import GmshConstants
 from porepy.grids.gmsh import mesh_2_grid
+from porepy.fracs import simplex
 
 
 def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
@@ -326,15 +327,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
 def compute_transmissibilies(
     reg, local_gb, basis_functions, cc_assembler, cc_bc_values, coarse_grid, discr, macro_data
 ):
-    # Read the mesh file for the micro problem
-    mesh = meshio.read(local_gb.file_name + ".msh")
-
-    # Invert the meshio field_data so that phys_names maps from the tags that gmsh
-    # assigns to XXX, to the physical names
-    phys_names = {v[0]: k for k, v in mesh.field_data.items()}
-
-    # Mesh points
-    pts = mesh.points
+    pts, cells, cell_info, phys_names = simplex._read_gmsh_file(local_gb.file_name + '.msh')
 
     gmsh_constants = GmshConstants()
 
@@ -350,9 +343,9 @@ def compute_transmissibilies(
         # Create all 2d grids that correspond to an auxiliary surface
         g_surf, _ = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
         )
     else:
@@ -360,10 +353,9 @@ def compute_transmissibilies(
         # Create all 2d grids that correspond to a domain boundary
         g_surf = mesh_2_grid.create_2d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
-            network=local_gb.network,
+            cell_info,
             is_embedded=True,
             surface_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
         )
