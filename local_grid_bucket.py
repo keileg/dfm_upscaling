@@ -545,14 +545,8 @@ class LocalGridBucketSet:
         decomp = network.decomposition
 
         # Recover the full description of the gmsh mesh
-        mesh = meshio.read(file_name + ".msh")
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + '.msh')
 
-        # Invert the meshio field_data so that phys_names maps from the tags that gmsh
-        # assigns to XXX, to the physical names
-        phys_names = {v[0]: k for k, v in mesh.field_data.items()}
-
-        # Mesh points
-        pts = mesh.points
 
         # We need to recover four types of grids:
         #  1) 2d grids on the domain surfaces
@@ -565,11 +559,10 @@ class LocalGridBucketSet:
         # Create all 2d grids that correspond to a domain boundary
         g_2d_all = mesh_2_grid.create_2d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             is_embedded=True,
-            network=network,
             surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
         )
 
@@ -592,9 +585,9 @@ class LocalGridBucketSet:
         # boundary
         g_1d = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_LINE,
             return_fracture_tips=False,
         )
@@ -614,9 +607,9 @@ class LocalGridBucketSet:
         # The latter is excluded by the constraints keyword.
         g_1d_auxiliary = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
             constraints=ia_edge,
             return_fracture_tips=False,
@@ -632,9 +625,9 @@ class LocalGridBucketSet:
         # meeting of fracture surfaces within a boundary surface.
         g_0d = mesh_2_grid.create_0d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
 
