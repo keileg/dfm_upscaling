@@ -290,8 +290,8 @@ class LocalGridBucketSet:
         """
         decomp = network.decomposition
         # Recover the full description of the gmsh mesh
-        
-        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + '.msh')
+
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
 
         gmsh_constants = GmshConstants()
         # Create all 1d grids that correspond to a domain boundary
@@ -545,8 +545,7 @@ class LocalGridBucketSet:
         decomp = network.decomposition
 
         # Recover the full description of the gmsh mesh
-        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + '.msh')
-
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
 
         # We need to recover four types of grids:
         #  1) 2d grids on the domain surfaces
@@ -902,3 +901,20 @@ class LocalGridBucketSet:
 
         return boundary_points, boundary_ind
 
+    def __repr__(self) -> str:
+        s = (
+            f"Set of GridBuckets in {self.dim} dimensions\n"
+            f"Main Bucket contains "
+            f"{len(self.gb.grids_of_dimension(self.dim-1))} fractures\n"
+            f"In lower dimensions:\n"
+        )
+
+        if self.dim == 2:
+            s += f"In total {len(self.line_gb)} 1d buckets\n"
+        else:
+            s += (
+                f"In total {len(self.surface_gb)} 2d buckets and "
+                f"{len(self.line_gb)} 1d buckets\n"
+            )
+
+        return s
