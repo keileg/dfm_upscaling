@@ -334,7 +334,7 @@ def compute_transmissibilies(
     coarse_grid,
     discr,
     macro_data,
-    sanity_check=True
+    sanity_check=True,
 ):
     pts, cells, cell_info, phys_names = simplex._read_gmsh_file(
         local_gb.file_name + ".msh"
@@ -538,7 +538,12 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
     # Boundary conditions are discretized by a set of local problems, initialized by
     # unit values at the relevant boundary (similar to the cell center initiation for
     # basis function computation). We will therefore need an assembler for each local
-    # grid bucket, and initialize the 
+    # grid bucket, and initialize the
+    # Find the index of region boundary surfaces that are also on a macro boundary
+    reg_bound_surface: np.ndarray = np.where(reg.surface_is_boundary)[0]
+    if reg_bound_surface.size == 0:
+        # Nothing to do here
+        return [], [], []
 
     # Data structure to store Assembler of each grid bucket
     assembler_map = {}
@@ -567,16 +572,10 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
             # Associate the assembler with this gb
             assembler_map[gb] = assembler
 
-    # Find the index of region boundary surfaces that are also on a macro boundary
-    reg_bound_surface: np.ndarray = np.where(reg.surface_is_boundary)[0]
-    if reg_bound_surface.size == 0:
-        # Nothing to do here
-        return
-
     # The macro face may be split into several region faces (mpfa in 3d).
     # Get hold of these, and get a mapping from the region faces to the macro faces
     if reg.name == "mpfa":
-        
+
         all_faces = []
         # By construction of the boundary of the mpfa region, the surface will have two
         # (2d) or three (3d) nodes, with one being defined by a macro face center.
@@ -605,7 +604,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
     # TODO: The edge coordinate is used to identify micro points on the surface. For
     # 3d grids, we will likely need more coordinate information; it will be necessary
     # to identify all points on the line between the edge and the face center (this
-    # line will be the boundary of a 2d surface, on which we need to set boundary 
+    # line will be the boundary of a 2d surface, on which we need to set boundary
     # conditions).
     for ind, bfi in enumerate(macro_bound_faces):
         # Region surfaces on this macro surface. Essentially invert
@@ -635,6 +634,10 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
     # Get the positive direction of the macro faces. This will be needed to compare the
     # signs of the macro and micro faces.
     _, macro_fi, macro_sgn = sps.find(pp.fvutils.scalar_divergence(coarse_g))
+
+    boundary_basis_functions = {}
+    boundary_assemblers = {}
+    boundary_bc_values = {}
 
     # Loop over all macro faces, provide discretization of boundary condition
     for macro_face, surf, edge in surface_edge_pairs:
@@ -729,3 +732,31 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
             # We are done with all buckets of this dimension. Redefine the current
             # values to previous values, and move on to the next set of buckets.
             prev_values = new_prev_val
+
+        # We have come to the end of the discretization for this boundary face.
+        # Store basis functions, assembler and boundary condition.
+        boundary_basis_functions[macro_face] = x
+
+        boundary_assemblers[macro_face] = assembler
+        boundary_bc_values[macro_face] = {}
+        for g, d in gb:
+            boundary_bc_values[macro_face][g] = d[pp.PARAMETERS]["flow"][
+                "bc_values"
+            ].copy()
+
+    # Use the basis functions to compute transmissibilities for the boundary
+    # discretizaiton
+    col_ind, row_ind, trm = compute_transmissibilies(
+        reg,
+        local_gb,
+        boundary_basis_functions,
+        boundary_assemblers,
+        boundary_bc_values,
+        coarse_g,
+        discr,
+        macro_data,
+        # The transmissibilities need to sum to zero for boundary discretizaitons, so
+        # we skip the sanity check
+        sanity_check=False,
+    )
+    return col_ind, row_ind, trm
