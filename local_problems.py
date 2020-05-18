@@ -334,6 +334,7 @@ def compute_transmissibilies(
     coarse_grid,
     discr,
     macro_data,
+    sanity_check=True
 ):
     pts, cells, cell_info, phys_names = simplex._read_gmsh_file(
         local_gb.file_name + ".msh"
@@ -500,7 +501,7 @@ def compute_transmissibilies(
     # pressure
     # Check if the basis functions form a partition of unity, but only for internal
     # faces, or for purely Neumann boundaries.
-    check_trm = True
+    check_trm = sanity_check
     for bi in reg.macro_boundary_faces():
         if macro_data["bc"].is_dir[bi]:
             check_trm = False
