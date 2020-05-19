@@ -404,8 +404,6 @@ def compute_transmissibilies(
             # Loop over all grids in the grid_bucket.
             for loc_g, d in gb:
 
-                # ATTENZIONE I NOMI DELLE VARIABILI DEVONO ESSERE FATTI MEGLIO
-
                 # Flux field for this problem of this grid
                 grid_flux = d[pp.PARAMETERS][discr.keyword]["darcy_flux"]
 
@@ -500,6 +498,8 @@ def compute_transmissibilies(
     # check if we get an error message here
     if check_trm:
         trm_sum = np.bincount(coarse_face_ind, weights=trm)
-        assert np.allclose(trm_sum, 0)
+        trm_scale = np.amax(np.bincount(coarse_face_ind, weights=0.5*np.abs(trm)))
+        trm_scale = trm_scale if trm_scale else 1
+        assert np.allclose(trm_sum/trm_scale, 0)
 
     return coarse_cell_ind, coarse_face_ind, trm
