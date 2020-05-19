@@ -715,10 +715,6 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                 x = sps.linalg.spsolve(A, b)
                 assembler.distribute_variable(x)
 
-                if gb.dim_max() == local_gb.dim:
-                    gm = gb.grids_of_dimension(2)[0]
-                    pp.plot_grid(gm, x[: gm.num_cells])
-
                 # Avoid this operation for the highest dimensional gb
                 if gb.dim_max() <= local_gb.dim:
                     for g, d in gb:
