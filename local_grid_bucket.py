@@ -610,6 +610,25 @@ class LocalGridBucketSet:
             return_fracture_tips=False,
         )
 
+        # On macro boundaries, the local meshing will generate surface grids that are
+        # completely on the macro boundary. Remove these.
+        for si in np.where(self.reg.surface_is_boundary)[0]:
+            # Nodes on the ia surface boundary
+            s_pts = self.reg.coords(
+                self.reg.surfaces[si], self.reg.surface_node_type[si]
+            )
+            # Build a list of 1d grids that are not in this surface.
+            g_tmp = []
+            for g in g_1d_auxiliary:
+                g_pts = g.nodes
+                # Distance from the grid nodes to the surface. If at least one point is
+                # not on the surface, the grid will be kept.
+                dist, *_ = pp.distances.points_polygon(g_pts, s_pts)
+                if dist.max() > self.tol:
+                    g_tmp.append(g)
+            # Update list of 1d grids
+            g_1d_auxiliary = g_tmp
+
         # Points that are tagged as both on a fracture and on the domain boundary
         fracture_boundary_points = np.where(
             decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
@@ -658,6 +677,10 @@ class LocalGridBucketSet:
         # It is critical that the operation is carried out before splitting of the
         # nodes, or else the local-to-global node numbering is not applicable.
         for hi, hg in enumerate(g_2d):
+            # First connect the 2d grid to itself
+            pairs.append((hi, hi))
+
+            # Next, connection between hg and lower-dimensional grids.
             # We have to specify the number of nodes per face to generate a
             # matrix of the nodes of each face.
             nodes_per_face = 2
@@ -845,7 +868,7 @@ class LocalGridBucketSet:
             for g, _ in gb:
                 # Grids of co-dimension > 1 will not be assigned a bc on the macro
                 # boundary
-                if g.dim < reg.dim - 1:
+                if self.reg.dim == 2 and g.dim < reg.dim - 1:
                     continue
 
                 # Find face centers on the region surface
