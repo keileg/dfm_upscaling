@@ -9,6 +9,7 @@ Created on Tue Mar 24 06:56:22 2020
 import numpy as np
 import porepy as pp
 import meshio
+from typing import List, Tuple
 
 import scipy.sparse as sps
 from porepy.grids.constants import GmshConstants
@@ -325,9 +326,19 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
 
 
 def compute_transmissibilies(
-    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, coarse_grid, discr, macro_data
+    reg,
+    local_gb,
+    basis_functions,
+    cc_assembler,
+    cc_bc_values,
+    coarse_grid,
+    discr,
+    macro_data,
+    sanity_check=True,
 ):
-    pts, cells, cell_info, phys_names = simplex._read_gmsh_file(local_gb.file_name + '.msh')
+    pts, cells, cell_info, phys_names = simplex._read_gmsh_file(
+        local_gb.file_name + ".msh"
+    )
 
     gmsh_constants = GmshConstants()
 
@@ -488,7 +499,7 @@ def compute_transmissibilies(
     # pressure
     # Check if the basis functions form a partition of unity, but only for internal
     # faces, or for purely Neumann boundaries.
-    check_trm = True
+    check_trm = sanity_check
     for bi in reg.macro_boundary_faces():
         if macro_data["bc"].is_dir[bi]:
             check_trm = False
@@ -503,3 +514,245 @@ def compute_transmissibilies(
         assert np.allclose(trm_sum/trm_scale, 0)
 
     return coarse_cell_ind, coarse_face_ind, trm
+
+
+def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
+    """
+    Discretization of boundary conditions, consistent with the construction of basis
+    functions for internal cells.
+    
+    The implementation is in part very similar to that for the basis function
+    computation, and should be refactored at some point.
+
+    Args:
+        reg (TYPE): DESCRIPTION.
+        local_gb (TYPE): DESCRIPTION.
+        discr (TYPE): DESCRIPTION.
+        macro_data (TYPE): DESCRIPTION.
+        coarse_g (TYPE): DESCRIPTION.
+
+    Returns:
+        None.
+
+    """
+    # Boundary conditions are discretized by a set of local problems, initialized by
+    # unit values at the relevant boundary (similar to the cell center initiation for
+    # basis function computation). We will therefore need an assembler for each local
+    # grid bucket, and initialize the
+    # Find the index of region boundary surfaces that are also on a macro boundary
+    reg_bound_surface: np.ndarray = np.where(reg.surface_is_boundary)[0]
+    if reg_bound_surface.size == 0:
+        # Nothing to do here
+        return [], [], []
+
+    # Data structure to store Assembler of each grid bucket
+    assembler_map = {}
+
+    # Get a list of the local grid bucktes. This will be first 1d, then 2d (if dim == 3)
+    # and then the real local gb
+    bucket_list = local_gb.bucket_list()
+
+    # Loop over all grid buckets: first type of gb (line, surface, 3d)
+    for gb_set in bucket_list:
+        # Then all gbs of this type
+        for gb in gb_set:
+            # Set parameters and discretization.
+            # The gb may contain parameters, variable and discretization specifications
+            # from a previous construction of basis functions. This will be overwritten
+            # by the lines below (see implementation of the methods in discr)
+            discr.set_parameters_cell_basis(gb, macro_data["bc"])
+            discr.set_variables_discretizations_cell_basis(gb)
+
+            # Create an Assembler and discretize the specified problem. The parameters
+            # and type (not value) of boundary condition will be the same throughout the
+            # calculations, thus discretization can be done once.
+            assembler = pp.Assembler(gb)
+            assembler.discretize()
+
+            # Associate the assembler with this gb
+            assembler_map[gb] = assembler
+
+    # The macro face may be split into several region faces (mpfa in 3d).
+    # Get hold of these, and get a mapping from the region faces to the macro faces
+    if reg.name == "mpfa":
+
+        all_faces = []
+        # By construction of the boundary of the mpfa region, the surface will have two
+        # (2d) or three (3d) nodes, with one being defined by a macro face center.
+        # Use this macro face index to identify region surfaces that are part of the
+        # same macro surface.
+        for si in reg_bound_surface:
+            face_of_si = reg.surfaces[si][reg.surface_node_type[si].index("face")]
+            all_faces.append(face_of_si)
+
+        macro_bound_faces, reg_to_macro_bound_ind = np.unique(
+            all_faces, return_inverse=True
+        )
+    else:
+        # Tpfa; the region index gives the macro face
+        macro_bound_faces = np.array([reg.reg_ind])
+        # The mapping between region and macro surfaces is simple
+        reg_to_macro_bound_ind = np.array([0])
+
+    # The first item gives the macro boundary face.
+    # Second gives the region faces. Third gives coordinates where region edges end on
+    # this surface.
+    surface_edge_pairs: List[Tuple[int, np.ndarray, List[np.ndarray]]] = []
+
+    # Loop over all macro boundary faces, find its associated region surfaces, and
+    # region edge coordinates on the face.
+    # TODO: The edge coordinate is used to identify micro points on the surface. For
+    # 3d grids, we will likely need more coordinate information; it will be necessary
+    # to identify all points on the line between the edge and the face center (this
+    # line will be the boundary of a 2d surface, on which we need to set boundary
+    # conditions).
+    for ind, bfi in enumerate(macro_bound_faces):
+        # Region surfaces on this macro surface. Essentially invert
+        # reg_to_macro_bound_ind, this could probably have been done in a simpler way.
+        loc_surfaces = reg_bound_surface[np.where(reg_to_macro_bound_ind == ind)[0]]
+
+        loc_edges = []
+
+        # Loop over all edges, find those that end on this macro face.
+        # The check is different for tpfa and mpfa type regions.
+        for edge, edge_node in zip(reg.edges, reg.edge_node_type):
+            if reg.name == "mpfa":
+                if edge[edge_node.index("face")] == bfi:
+                    loc_edges.append(
+                        coarse_g.face_centers[:, edge[edge_node.index("face")]]
+                    )
+            else:  # tpfa
+                if len(edge_node) == 2:
+                    loc_edges.append(coarse_g.nodes[:, edge[edge_node.index("node")]])
+
+        surface_edge_pairs.append((bfi, loc_surfaces, loc_edges))
+
+    # Boundary condition object for the macro problem. We will use this to set the
+    # right boundary condition also for the micro problem.
+    macro_bc = macro_data["bc"]
+
+    # Get the positive direction of the macro faces. This will be needed to compare the
+    # signs of the macro and micro faces.
+    _, macro_fi, macro_sgn = sps.find(pp.fvutils.scalar_divergence(coarse_g))
+
+    boundary_basis_functions = {}
+    boundary_assemblers = {}
+    boundary_bc_values = {}
+
+    # Loop over all macro faces, provide discretization of boundary condition
+    for macro_face, surf, edge in surface_edge_pairs:
+
+        # Data structure to store the value for the grid bucket set of a lower dimension
+        prev_values = []
+
+        # Initialize the computation by putting a unit value in the point.
+        # TODO: This must be expanded in 3d, to account also for the 1d line between
+        # macro face and edge. The values to use here will depend on whether the
+        # condition is Neumann or Dirichlet.
+        for e in edge:
+            gp = pp.PointGrid(e.reshape((-1, 1)))
+            gp.compute_geometry()
+            prev_values.append((gp, np.array([1])))
+
+        for gb_set in bucket_list:
+            # Data structure to store computed values, that will be used as boundary
+            # condition for the next gb_set
+            new_prev_val = []
+            # Loop over all buckets within this set.
+            # if gb.dim_max() == 1, there will be one gb for each edge in the
+            # interaction region, etc.
+            for gb in gb_set:
+                # Loop over the set of pressure values from the previous dimension
+                # Find matches between previous cells and current faces, and assign
+                # boundary conditions
+                for g_prev, values in prev_values:
+                    # Keep track of which cells in g_prev has been used to define bcs in
+                    # this gb
+                    found = np.zeros(g_prev.num_cells, dtype=np.bool)
+
+                    # Loop over all grids in gb,
+                    for g, d in gb:
+                        # This will update the boundary condition values
+                        bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
+
+                        if hasattr(g, "macro_face_ind"):
+
+                            hit = g.macro_face_ind == macro_face
+                            micro_bound_face = g.face_on_macro_bound[hit]
+                            if macro_bc.is_dir[macro_face]:
+                                bc_values[micro_bound_face] = 1
+                            else:
+                                macro_direction = macro_sgn[macro_fi == macro_face][0]
+                                _, micro_fi, micro_sgn = sps.find(
+                                    pp.fvutils.scalar_divergence(g)
+                                )
+                                _, in_bound, in_all = np.intersect1d(
+                                    micro_bound_face, micro_fi, return_indices=True
+                                )
+
+                                switch_direction = micro_sgn[in_all] != macro_direction
+
+                                #  pdb.set_trace()
+                                bc_values[micro_bound_face] = (
+                                    g.face_areas[micro_bound_face]
+                                    * switch_direction[in_bound]
+                                )
+
+                        cells_found = transfer_bc(g_prev, values, g, bc_values, reg.dim)
+                        found[cells_found] = True
+                    # Verify that either all values in the previous grid has been used
+                    # as boundary conditions, or none have (the latter may happen in
+                    # 3d problems).
+                    # It is not 100% clear that this assertion is critical, but it seems
+                    # likely, so we will need to debug if this is ever broken
+                    assert np.all(found) or np.all(np.logical_not(found))
+
+                # Get assembler
+                assembler = assembler_map[gb]
+                # This will use the updated values for the boundary conditions
+                A, b = assembler.assemble_matrix_rhs()
+                # Solve and distribute
+                x = sps.linalg.spsolve(A, b)
+                assembler.distribute_variable(x)
+
+                # Avoid this operation for the highest dimensional gb
+                if gb.dim_max() <= local_gb.dim:
+                    for g, d in gb:
+                        # Reset the boundary conditions in preparation for the next basis
+                        # function
+                        d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
+                        # Store the pressure values to be used as new boundary conditions
+                        # for the problem with one dimension more
+                        new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
+
+            # We are done with all buckets of this dimension. Redefine the current
+            # values to previous values, and move on to the next set of buckets.
+            prev_values = new_prev_val
+
+        # We have come to the end of the discretization for this boundary face.
+        # Store basis functions, assembler and boundary condition.
+        boundary_basis_functions[macro_face] = x
+
+        boundary_assemblers[macro_face] = assembler
+        boundary_bc_values[macro_face] = {}
+        for g, d in gb:
+            boundary_bc_values[macro_face][g] = d[pp.PARAMETERS]["flow"][
+                "bc_values"
+            ].copy()
+
+    # Use the basis functions to compute transmissibilities for the boundary
+    # discretizaiton
+    col_ind, row_ind, trm = compute_transmissibilies(
+        reg,
+        local_gb,
+        boundary_basis_functions,
+        boundary_assemblers,
+        boundary_bc_values,
+        coarse_g,
+        discr,
+        macro_data,
+        # The transmissibilities need to sum to zero for boundary discretizaitons, so
+        # we skip the sanity check
+        sanity_check=False,
+    )
+    return col_ind, row_ind, trm

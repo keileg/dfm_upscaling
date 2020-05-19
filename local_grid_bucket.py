@@ -161,9 +161,7 @@ class LocalGridBucketSet:
 
         # Loop over edgen in region, store coordinates
         for edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
-            coords = np.zeros((3, 0))
-            for e, node in zip(edge, node_type):
-                coords = np.hstack((coords, self.reg._coord(node, e)))
+            coords = self.reg.coords(edge, node_type)
 
             # The first n-1 points are start points, the rest are end points
             for i in range(coords.shape[1] - 1):
@@ -290,8 +288,8 @@ class LocalGridBucketSet:
         """
         decomp = network.decomposition
         # Recover the full description of the gmsh mesh
-        
-        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + '.msh')
+
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
 
         gmsh_constants = GmshConstants()
         # Create all 1d grids that correspond to a domain boundary
@@ -379,9 +377,7 @@ class LocalGridBucketSet:
         for ia_edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
 
             # Recover coordinates of the edge points
-            ia_edge_coord = np.zeros((3, 0))
-            for e, t in zip(ia_edge, node_type):
-                ia_edge_coord = np.hstack((ia_edge_coord, self.reg._coord(t, e)))
+            ia_edge_coord = self.reg.coords(ia_edge, node_type)
 
             # Match points in the region with points in the network
             # It may be possible to recover this information from the network
@@ -545,14 +541,7 @@ class LocalGridBucketSet:
         decomp = network.decomposition
 
         # Recover the full description of the gmsh mesh
-        mesh = meshio.read(file_name + ".msh")
-
-        # Invert the meshio field_data so that phys_names maps from the tags that gmsh
-        # assigns to XXX, to the physical names
-        phys_names = {v[0]: k for k, v in mesh.field_data.items()}
-
-        # Mesh points
-        pts = mesh.points
+        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
 
         # We need to recover four types of grids:
         #  1) 2d grids on the domain surfaces
@@ -565,11 +554,10 @@ class LocalGridBucketSet:
         # Create all 2d grids that correspond to a domain boundary
         g_2d_all = mesh_2_grid.create_2d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             is_embedded=True,
-            network=network,
             surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
         )
 
@@ -592,9 +580,9 @@ class LocalGridBucketSet:
         # boundary
         g_1d = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_LINE,
             return_fracture_tips=False,
         )
@@ -614,13 +602,32 @@ class LocalGridBucketSet:
         # The latter is excluded by the constraints keyword.
         g_1d_auxiliary = mesh_2_grid.create_1d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
             constraints=ia_edge,
             return_fracture_tips=False,
         )
+
+        # On macro boundaries, the local meshing will generate surface grids that are
+        # completely on the macro boundary. Remove these.
+        for si in np.where(self.reg.surface_is_boundary)[0]:
+            # Nodes on the ia surface boundary
+            s_pts = self.reg.coords(
+                self.reg.surfaces[si], self.reg.surface_node_type[si]
+            )
+            # Build a list of 1d grids that are not in this surface.
+            g_tmp = []
+            for g in g_1d_auxiliary:
+                g_pts = g.nodes
+                # Distance from the grid nodes to the surface. If at least one point is
+                # not on the surface, the grid will be kept.
+                dist, *_ = pp.distances.points_polygon(g_pts, s_pts)
+                if dist.max() > self.tol:
+                    g_tmp.append(g)
+            # Update list of 1d grids
+            g_1d_auxiliary = g_tmp
 
         # Points that are tagged as both on a fracture and on the domain boundary
         fracture_boundary_points = np.where(
@@ -632,9 +639,9 @@ class LocalGridBucketSet:
         # meeting of fracture surfaces within a boundary surface.
         g_0d = mesh_2_grid.create_0d_grids(
             pts,
-            mesh.cells,
+            cells,
             phys_names,
-            mesh.cell_data,
+            cell_info,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
 
@@ -670,6 +677,10 @@ class LocalGridBucketSet:
         # It is critical that the operation is carried out before splitting of the
         # nodes, or else the local-to-global node numbering is not applicable.
         for hi, hg in enumerate(g_2d):
+            # First connect the 2d grid to itself
+            pairs.append((hi, hi))
+
+            # Next, connection between hg and lower-dimensional grids.
             # We have to specify the number of nodes per face to generate a
             # matrix of the nodes of each face.
             nodes_per_face = 2
@@ -851,15 +862,13 @@ class LocalGridBucketSet:
                 continue
 
             # Get coordinates of the surface points. There will be reg.dim points
-            pts = np.empty((3, 0))
-            for ind, node in zip(surf, node_type):
-                pts = np.hstack((pts, reg._coord(node, ind)))
+            pts = reg.coords(surf, node_type)
 
             # Loop over all grids in the main gb, and look for faces on the surface.
             for g, _ in gb:
                 # Grids of co-dimension > 1 will not be assigned a bc on the macro
                 # boundary
-                if g.dim < reg.dim - 1:
+                if self.reg.dim == 2 and g.dim < reg.dim - 1:
                     continue
 
                 # Find face centers on the region surface
@@ -909,40 +918,20 @@ class LocalGridBucketSet:
 
         return boundary_points, boundary_ind
 
-
-if __name__ == "__main__":
-    from dfm_upscaling.utils import create_grids
-
-    interior_face = 4
-    if True:
-        g = create_grids.cart_2d()
-
-        p = np.array([[0.7, 1.3], [1.0, 1.5]])
-        edges = np.array([[0], [1]])
-
-        reg = ia_reg.extract_tpfa_regions(g, faces=[3])[0]
-        reg = ia_reg.extract_mpfa_regions(g, nodes=[3])[0]
-        reg.add_fractures(points=p, edges=edges)
-
-        local_gb = LocalGridBucketSet(2, reg)
-        local_gb.construct_local_buckets()
-
-    else:
-        g = create_grids.cart_3d()
-        reg = ia_reg.extract_tpfa_regions(g, faces=[interior_face])[0]
-        #  reg = ia_reg.extract_mpfa_regions(g, nodes=[13])[0]
-
-        f_1 = pp.Fracture(
-            np.array([[0.7, 1.4, 1.4, 0.7], [0.5, 0.5, 1.4, 1.4], [0.2, 0.2, 0.8, 0.8]])
+    def __repr__(self) -> str:
+        s = (
+            f"Set of GridBuckets in {self.dim} dimensions\n"
+            f"Main Bucket contains "
+            f"{len(self.gb.grids_of_dimension(self.dim-1))} fractures\n"
+            f"In lower dimensions:\n"
         )
 
-        f_2 = pp.Fracture(
-            np.array([[0.3, 0.3, 1.4, 1.4], [0.7, 1.4, 1.4, 0.7], [0.1, 0.1, 0.9, 0.9]])
-        )
+        if self.dim == 2:
+            s += f"In total {len(self.line_gb)} 1d buckets\n"
+        else:
+            s += (
+                f"In total {len(self.surface_gb)} 2d buckets and "
+                f"{len(self.line_gb)} 1d buckets\n"
+            )
 
-        reg.add_fractures(fractures=[f_1, f_2])
-
-        local_gb = LocalGridBucketSet(3, reg)
-        local_gb.construct_local_buckets()
-
-        assert False
+        return s
