@@ -161,9 +161,7 @@ class LocalGridBucketSet:
 
         # Loop over edgen in region, store coordinates
         for edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
-            coords = np.zeros((3, 0))
-            for e, node in zip(edge, node_type):
-                coords = np.hstack((coords, self.reg._coord(node, e)))
+            coords = self.reg.coords(edge, node_type)
 
             # The first n-1 points are start points, the rest are end points
             for i in range(coords.shape[1] - 1):
@@ -379,9 +377,7 @@ class LocalGridBucketSet:
         for ia_edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
 
             # Recover coordinates of the edge points
-            ia_edge_coord = np.zeros((3, 0))
-            for e, t in zip(ia_edge, node_type):
-                ia_edge_coord = np.hstack((ia_edge_coord, self.reg._coord(t, e)))
+            ia_edge_coord = self.reg.coords(ia_edge, node_type)
 
             # Match points in the region with points in the network
             # It may be possible to recover this information from the network
@@ -843,9 +839,7 @@ class LocalGridBucketSet:
                 continue
 
             # Get coordinates of the surface points. There will be reg.dim points
-            pts = np.empty((3, 0))
-            for ind, node in zip(surf, node_type):
-                pts = np.hstack((pts, reg._coord(node, ind)))
+            pts = reg.coords(surf, node_type)
 
             # Loop over all grids in the main gb, and look for faces on the surface.
             for g, _ in gb:

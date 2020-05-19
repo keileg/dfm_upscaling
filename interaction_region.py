@@ -58,7 +58,7 @@ class InteractionRegion:
     ####################
 
     def mesh(
-        self
+        self,
     ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
         """ Create a local mesh for this interaction region.
         """
@@ -92,8 +92,7 @@ class InteractionRegion:
             domain_edges = np.hstack((domain_edges, domain_pts.shape[1] + e))
 
             # Then add new points
-            for ind, node in zip(surf, node_type):
-                domain_pts = np.hstack((domain_pts, self._coord(node, ind)))
+            domain_pts = np.hstack((domain_pts, self.coords(surf, node_type)))
 
             edge_2_surf = np.hstack((edge_2_surf, surf_ind + np.ones(e.shape[1])))
 
@@ -114,8 +113,7 @@ class InteractionRegion:
                 (constraint_edges, constraint_pts.shape[1] + e)
             )
             # Then add new points
-            for ind, node in zip(constraint, node_type):
-                constraint_pts = np.hstack((constraint_pts, self._coord(node, ind)))
+            constraint_pts = self.coords(constraint, node_type)
 
             edge_2_constraint = np.hstack(
                 (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=np.int))
@@ -169,28 +167,13 @@ class InteractionRegion:
     def _mesh_3d(self) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
         boundaries: List[np.ndarray] = []
-        for surf_ind, (surf, node_type) in enumerate(
-            zip(self.surfaces, self.surface_node_type)
-        ):
-            pts = np.empty((3, 0))
-
-            # Then add new points
-            for ind, node in zip(surf, node_type):
-                pts = np.hstack((pts, self._coord(node, ind)))
-
-            boundaries.append(pts)
+        for surf, node_type in zip(self.surfaces, self.surface_node_type):
+            boundaries.append(self.coords(surf, node_type))
 
         constraints: List[np.ndarray] = []
 
-        for constraint_ind, (constraint, node_type) in enumerate(
-            zip(self.constraints, self.constraint_node_type)
-        ):
-            pts = np.empty((3, 0))
-            # Then add new points
-            for ind, node in zip(constraint, node_type):
-                pts = np.hstack((pts, self._coord(node, ind)))
-
-            constraints.append(pp.Fracture(pts))
+        for constraint, node_type in zip(self.constraints, self.constraint_node_type):
+            constraints.append(pp.Fracture(self.coords(constraint, node_type)))
 
         polygons: List[np.ndarray] = self.fractures + constraints
 
@@ -213,19 +196,25 @@ class InteractionRegion:
 
         return gb, network, file_name
 
-    def _coord(self, node: str, ind: int):
-        if node == "cell":
-            p = self.g.cell_centers[:, ind].reshape((-1, 1))
-        elif node == "face":
-            p = self.g.face_centers[:, ind].reshape((-1, 1))
-        elif node == "node":
-            p = self.g.nodes[:, ind].reshape((-1, 1))
-        elif node == "edge":
-            p = 0.5 * (self.g.nodes[:, ind].reshape((-1, 1)) + self.node_coord)
-        else:
-            raise ValueError("Unknown node type " + node)
+    def coords(self, indices, node_type) -> np.ndarray:
+        indices = np.atleast_1d(np.asarray(indices))
+        if isinstance(node_type, str):
+            node_type = [node_type]
 
-        return p
+        pts = np.zeros((3, 0))
+        for ind, node in zip(indices, node_type):
+            if node == "cell":
+                p = self.g.cell_centers[:, ind].reshape((-1, 1))
+            elif node == "face":
+                p = self.g.face_centers[:, ind].reshape((-1, 1))
+            elif node == "node":
+                p = self.g.nodes[:, ind].reshape((-1, 1))
+            elif node == "edge":
+                p = 0.5 * (self.g.nodes[:, ind].reshape((-1, 1)) + self.node_coord)
+            else:
+                raise ValueError("Unknown node type " + node)
+            pts = np.hstack((pts, p))
+        return pts
 
     def add_fractures(
         self,
@@ -249,7 +238,7 @@ class InteractionRegion:
             for e, node in zip(edge, node_type):
                 if node == "cell":
                     ci.append(e)
-                    coords = np.hstack((coords, self._coord(node, e)))
+                    coords = np.hstack((coords, self.coords(e, node)))
 
         ci = np.array(ci, dtype=np.int)
 
@@ -276,8 +265,8 @@ class InteractionRegion:
 
         for edge, node_type in zip(self.edges, self.edge_node_type):
             for e, node in zip(edge, node_type):
-                min_coord = np.minimum(min_coord, self._coord(node, e))
-                max_coord = np.maximum(max_coord, self._coord(node, e))
+                min_coord = np.minimum(min_coord, self.coord(node, e))
+                max_coord = np.maximum(max_coord, self.coord(node, e))
 
         return np.hstack((min_coord, max_coord))
 
