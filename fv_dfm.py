@@ -60,6 +60,10 @@ class FVDFM(pp.FVElliptic):
                 micro_bc.is_dir[micro_ind] = macro_bc.is_dir[macro_ind]
 
             param = {"bc": micro_bc}
+
+            perm = pp.SecondOrderTensor(kxx=1e-5*np.ones(g.num_cells))
+            param["second_order_tensor"] = perm
+
             pp.initialize_default_data(g, d, self.keyword, param)
 
         for e, d in gb.edges():
@@ -70,7 +74,7 @@ class FVDFM(pp.FVElliptic):
             param = {}
 
             if g1.from_fracture:
-                param["normal_diffusivity"] = 1e1
+                param["normal_diffusivity"] = 1e-5
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -137,9 +141,9 @@ class FVDFM(pp.FVElliptic):
         # EK: Use arrays, convert to np.arrays afterwards. I don't want to think about
         # how many orders of maginuted faster the rest of the code must be before this
         #
-        I = []
-        J = []
-        dataIJ = []
+        rows = []
+        cols = []
+        data = []
 
         micro_network = parameter_dictionary[self.network_keyword]
 
@@ -154,27 +158,26 @@ class FVDFM(pp.FVElliptic):
             gb_set.construct_local_buckets()
 
             # First basis functions for local problems
-            basis_functions, assemblers = local_problems.cell_basis_functions(
-                reg, gb_set, self
+            basis_functions, cc_assembler, cc_bc_values = local_problems.cell_basis_functions(
+                reg, gb_set, self, parameter_dictionary
             )
 
             # Call method to transfer basis functions to transmissibilties over coarse
             # edges
             ci, fi, trm = local_problems.compute_transmissibilies(
-                reg, gb_set, basis_functions, assemblers, g, self
+                reg, gb_set, basis_functions, cc_assembler, cc_bc_values, g, self, parameter_dictionary
             )
 
-            import pdb
+            # AF: this happen for boundary conditions, to handle in a better way
+            if len(fi) == 0:
+                continue
 
-            pdb.set_trace()
-
-            I.append(fi)
-            J.append(ci)
-            dataIJ.append(trm)
+            rows += fi
+            cols += ci
+            data += trm
 
         # Construct the global matrix
-
-        flux = sps.coo_matrix((dataIJ, (I, J))).tocsr()
+        flux = sps.coo_matrix((data, (rows, cols)), shape=(g.num_faces, g.num_cells)).tocsr()
 
         matrix_dictionary[self.flux_matrix_key] = flux
 
