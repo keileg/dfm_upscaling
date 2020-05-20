@@ -633,7 +633,7 @@ def extract_mpfa_regions(
             np.array(tmp_surfaces),
             surface_node_type,
             surface_is_boundary,
-            np.array(tmp_edges),
+            np.array(tmp_edges, dtype=np.object),
             edge_node_type,
             constraints,
             constraints_node_type,
