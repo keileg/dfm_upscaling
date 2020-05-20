@@ -489,29 +489,25 @@ def compute_transmissibilies(
                     coarse_cell_ind.append(cci)
                     coarse_face_ind.append(cfi)
                     trm.append(np.asarray(surface_flux).sum())
-                    if loc_g.dim == gs.dim:
-                        # EK: This is roughly where I'm looking for errors right now
-                        print(surface_flux)
-                        #   pdb.set_trace()
-                        debug = []
 
-    # The macro transmissibilities should sum to zero to preserve no flow for constant
-    # pressure
-    # Check if the basis functions form a partition of unity, but only for internal
-    # faces, or for purely Neumann boundaries.
     check_trm = sanity_check
     for bi in reg.macro_boundary_faces():
+        # The macro transmissibilities should sum to zero to preserve no flow for constant
+        # constant pressure.  Check if the basis functions form a partition of unity,
+        # but only for internal faces, or for purely Neumann boundaries.
         if macro_data["bc"].is_dir[bi]:
             check_trm = False
 
     # NOTE: This makes the tacit assumption that the ordering of the grids is the same
     # in all assemblers. This is probably true, but it should be the first item to
     # check if we get an error message here
-    if check_trm:
+    # If the region only has macro boundary faces (think corners of the macro grid)
+    # no transmissibilies have been computed, there is no need to run the check.
+    if check_trm and len(coarse_face_ind) > 0:
         trm_sum = np.bincount(coarse_face_ind, weights=trm)
-        trm_scale = np.amax(np.bincount(coarse_face_ind, weights=0.5*np.abs(trm)))
+        trm_scale = np.amax(np.bincount(coarse_face_ind, weights=0.5 * np.abs(trm)))
         trm_scale = trm_scale if trm_scale else 1
-        assert np.allclose(trm_sum/trm_scale, 0)
+        assert np.allclose(trm_sum / trm_scale, 0)
 
     return coarse_cell_ind, coarse_face_ind, trm
 
