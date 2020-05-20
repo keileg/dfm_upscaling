@@ -113,7 +113,8 @@ class InteractionRegion:
                 (constraint_edges, constraint_pts.shape[1] + e)
             )
             # Then add new points
-            constraint_pts = self.coords(constraint, node_type)
+            constraint_pts = np.hstack((constraint_pts,
+                                        self.coords(constraint, node_type)))
 
             edge_2_constraint = np.hstack(
                 (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=np.int))
