@@ -61,7 +61,7 @@ class FVDFM(pp.FVElliptic):
 
             param = {"bc": micro_bc}
 
-            perm = pp.SecondOrderTensor(kxx=1e-5*np.ones(g.num_cells))
+            perm = pp.SecondOrderTensor(kxx=1e-5 * np.ones(g.num_cells))
             param["second_order_tensor"] = perm
 
             pp.initialize_default_data(g, d, self.keyword, param)
@@ -137,13 +137,11 @@ class FVDFM(pp.FVElliptic):
         # Allocate the data to store matrix entries, that's an efficient
         # way to create a sparse matrix.
 
-        ###### @Eirik, I imagine we can compute this for tpfa and mpfa
-        # EK: Use arrays, convert to np.arrays afterwards. I don't want to think about
-        # how many orders of maginuted faster the rest of the code must be before this
-        #
-        rows = []
-        cols = []
-        data = []
+        # Data structures to build up the flux discretization as a sparse coo-matrix
+        rows, cols, data = [], [], []
+
+        # Data structures for the discretization of boundary conditions
+        rows_bound, cols_bound, data_bound = [], [], []
 
         micro_network = parameter_dictionary[self.network_keyword]
 
@@ -158,28 +156,59 @@ class FVDFM(pp.FVElliptic):
             gb_set.construct_local_buckets()
 
             # First basis functions for local problems
-            basis_functions, cc_assembler, cc_bc_values = local_problems.cell_basis_functions(
+            (
+                basis_functions,
+                cc_assembler,
+                cc_bc_values,
+            ) = local_problems.cell_basis_functions(
                 reg, gb_set, self, parameter_dictionary
             )
+            # TODO: Operator to reconstruct boundary pressure from the basis functions
 
             # Call method to transfer basis functions to transmissibilties over coarse
             # edges
             ci, fi, trm = local_problems.compute_transmissibilies(
-                reg, gb_set, basis_functions, cc_assembler, cc_bc_values, g, self, parameter_dictionary
+                reg,
+                gb_set,
+                basis_functions,
+                cc_assembler,
+                cc_bc_values,
+                g,
+                self,
+                parameter_dictionary,
             )
 
-            # AF: this happen for boundary conditions, to handle in a better way
-            if len(fi) == 0:
-                continue
+            if len(fi) > 0:
+                rows += fi
+                cols += ci
+                data += trm
 
-            rows += fi
-            cols += ci
-            data += trm
+            #
+            (
+                ci_bound,
+                ri_bound,
+                trm_bound,
+            ) = local_problems.discretize_boundary_conditions(
+                reg, gb_set, self, parameter_dictionary, g
+            )
+
+            if len(ri_bound) > 0:
+                rows_bound += ri_bound
+                cols_bound += ci_bound
+                data_bound += trm_bound
 
         # Construct the global matrix
-        flux = sps.coo_matrix((data, (rows, cols)), shape=(g.num_faces, g.num_cells)).tocsr()
+        flux = sps.coo_matrix(
+            (data, (rows, cols)), shape=(g.num_faces, g.num_cells)
+        ).tocsr()
+
+        # Construct the global flux matrix
+        bound_flux = sps.coo_matrix(
+            (data_bound, (rows_bound, cols_bound)), shape=(g.num_faces, g.num_faces)
+        ).tocsr()
 
         matrix_dictionary[self.flux_matrix_key] = flux
+        matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
 
     def _interaction_regions(self, g):
         raise NotImplementedError
