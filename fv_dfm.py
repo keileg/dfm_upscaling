@@ -210,6 +210,12 @@ class FVDFM(pp.FVElliptic):
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
 
+        # Empty discretization of vector sources - we will not provide this for the
+        # foreseeable future.
+        matrix_dictionary[self.vector_source_matrix_key] = sps.csc_matrix(
+            (g.num_faces, g.num_cells * g.dim)
+        )
+
     def _interaction_regions(self, g):
         raise NotImplementedError
 
