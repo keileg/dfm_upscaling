@@ -26,7 +26,7 @@ class FVDFM(pp.FVElliptic):
         # method for the discretization (tpfa or mpfa so far)
         self.method = None
 
-    def set_parameters_cell_basis(self, gb, macro_bc):
+    def set_parameters_cell_basis(self, gb, macro_data):
         """
         Assign parameters for the micro gb. Very simple for now, this must be improved.
 
@@ -37,6 +37,11 @@ class FVDFM(pp.FVElliptic):
             None.
 
         """
+
+        macro_bc = macro_data["bc"]
+        # For now, we use constant matrix permeability for the micro domains. Not sure
+        # what is the best way to generalize this, probably, we can just skip it.
+        permeability = macro_data["permeability"]
 
         # First initialize data
         for g, d in gb:
@@ -61,7 +66,7 @@ class FVDFM(pp.FVElliptic):
 
             param = {"bc": micro_bc}
 
-            perm = pp.SecondOrderTensor(kxx=1e-5 * np.ones(g.num_cells))
+            perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
             param["second_order_tensor"] = perm
 
             pp.initialize_default_data(g, d, self.keyword, param)

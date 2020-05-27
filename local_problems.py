@@ -195,7 +195,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             # The parameter definition should become much more general at some point
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
-            discr.set_parameters_cell_basis(gb, macro_data["bc"])
+            discr.set_parameters_cell_basis(gb, macro_data)
             discr.set_variables_discretizations_cell_basis(gb)
 
             # Create an Assembler and discretized the specified problem. The parameters
@@ -554,7 +554,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
             # The gb may contain parameters, variable and discretization specifications
             # from a previous construction of basis functions. This will be overwritten
             # by the lines below (see implementation of the methods in discr)
-            discr.set_parameters_cell_basis(gb, macro_data["bc"])
+            discr.set_parameters_cell_basis(gb, macro_data)
             discr.set_variables_discretizations_cell_basis(gb)
 
             # Create an Assembler and discretize the specified problem. The parameters
