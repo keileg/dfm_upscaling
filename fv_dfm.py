@@ -212,6 +212,14 @@ class FVDFM(pp.FVElliptic):
             (data_bound, (rows_bound, cols_bound)), shape=(g.num_faces, g.num_faces)
         ).tocsr()
 
+        # For Neumann boundaries, we should not use the flux discretization (the flux
+        # is known). The boundary discretization is modified to simply reuse the flux.
+        bc = parameter_dictionary["bc"]
+        neumann_faces = np.where(bc.is_neu)[0]
+        pp.fvutils.zero_out_sparse_rows(flux, neumann_faces)
+        # Not sure about sign here
+        pp.fvutils.zero_out_sparse_rows(bound_flux, neumann_faces, -1)
+
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
 
