@@ -466,24 +466,9 @@ def compute_transmissibilies(
                     # hit in the second argument (p), chances are that a fracture is
                     # intersecting at the auxiliary surface
 
-                    # EK: Something goes wrong in this case (fracture crosses the
-                    # surface), though not necessarily in this function call. No idea
-                    # what is wrong.
-                    # @Eirik, is it still true this comment?
                     grid_map = match_points_on_surface(
                         nc, loc_g.face_centers, coarse_grid.dim, gs.dim
                     )
-                else:
-                    # @Eirik, why not using the same procedure? This might be okay for 0d grid in 2d
-                    # it's anyway zero the flux in that case
-                    grid_map = match_points_on_surface(
-                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim
-                    )
-
-                    ##EK: Not sure what to do here
-                    ## We may drop this alternative for a while, but it will in effect
-                    ## correspond to basis functions that are not a partition of unity.
-                    ##raise NotImplementedError("Have not gotten this far")
 
                 # If we found any matches, loop over all micro faces, sum the fluxes,
                 # possibly with an adjustment of the flux direction.
