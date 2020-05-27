@@ -8,8 +8,9 @@ Created on Tue Mar 24 06:56:22 2020
 
 import numpy as np
 import porepy as pp
-import meshio
+from collections import namedtuple
 from typing import List, Tuple
+
 
 import scipy.sparse as sps
 from porepy.grids.constants import GmshConstants
@@ -362,20 +363,30 @@ def compute_transmissibilies(
     # The macro transmissibilities can be recovered from the fluxes over those micro
     # faces that coincide with a macro face.
     # To identify these micro faces, we recover the micro surface grids. These were
-    # present as internal constraints in the local grid bucket.
+    # present as internal constraints in the local grid bucket. Moreover, to discretize
+    # boundary conditions on the macro boundary, we also recover grids on the micro
+    # domain boundary; we will dump all grids not on the macro domain boundary shortly
     if coarse_grid.dim == 2:
         # Create all 2d grids that correspond to an auxiliary surface
-        g_surf, _ = mesh_2_grid.create_1d_grids(
+        constraint_surfaces, _ = mesh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
             line_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
         )
+        micro_domain_boundary, _ = mesh_2_grid.create_1d_grids(
+            pts,
+            cells,
+            phys_names,
+            cell_info,
+            line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+        )
+
     else:
         # EK: 3d domains have not been tested.
         # Create all 2d grids that correspond to a domain boundary
-        g_surf = mesh_2_grid.create_2d_grids(
+        constraint_surfaces = mesh_2_grid.create_2d_grids(
             pts,
             cells,
             phys_names,
@@ -383,12 +394,26 @@ def compute_transmissibilies(
             is_embedded=True,
             surface_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
         )
+        micro_domain_boundary = mesh_2_grid.create_2d_grids(
+            pts,
+            cells,
+            phys_names,
+            cell_info,
+            is_embedded=True,
+            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+        )
 
-    # Loop over all created surface grids,
-    for gi, gs in enumerate(g_surf):
+    # In the main loop over micro surface grids below, we need access to a limited set
+    # of information. This includes the coarse face index, which must be obtained in
+    # different ways for constraint and boundary grids. Use a dedicated structure for
+    # storage of the necessary information.
+    Surface = namedtuple(
+        "Surface", ["coarse_face_index", "cell_centers", "nodes", "dim"]
+    )
+    surfaces = []
 
-        # Cell and node coordinates.
-        # EK: Not sure if we need all of this, or more
+    # Loop over constraint surfaces, create a Surface for each one
+    for gi, gs in enumerate(constraint_surfaces):
         gs.compute_geometry()
         cc = gs.cell_centers
         nc = gs.nodes
@@ -402,6 +427,29 @@ def compute_transmissibilies(
         else:  # tpfa
             # For tpfa, the face is identified by the region number
             cfi = reg.reg_ind
+
+        surfaces.append(Surface(cfi, cc, nc, gs.dim))
+
+    # Loop over micro domain boundary grids, create a Surface
+    for gi, gs in enumerate(micro_domain_boundary):
+        # Only consider surfaces on the boundary of the macro domain
+        if not reg.surface_is_boundary[gi]:
+            continue
+        gs.compute_geometry()
+        cc = gs.cell_centers
+        nc = gs.nodes
+
+        ind_face = reg.surface_node_type[gi].index("face")
+        cfi = reg.surfaces[gi, ind_face]
+        surfaces.append(Surface(cfi, cc, nc, gs.dim))
+
+    # Loop over all created surface grids,
+    for gs in surfaces:
+
+        # Cell and node coordinates.
+        cc = gs.cell_centers
+        nc = gs.nodes
+        cfi = gs.coarse_face_index
 
         # Macro normal vector of the face
         coarse_normal = coarse_grid.face_normals[:, cfi]
