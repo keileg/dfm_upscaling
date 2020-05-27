@@ -306,7 +306,7 @@ class InteractionRegion:
 
         s += f"Region has:\n"
         s += f"{self.edges.shape[0]} 1d edges\n"
-        s += f"{self.surfaces.shape[0]} {self.dim - 1} surfaces\n"
+        s += f"{self.surfaces.shape[0]} {self.dim - 1}d surfaces\n"
         s += (
             f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary"
         )
