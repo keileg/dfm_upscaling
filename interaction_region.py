@@ -264,13 +264,13 @@ class InteractionRegion:
                 is max coordinates
 
         """
-        min_coord = np.ones((self.dim, 1)) * np.inf
-        max_coord = -np.ones((self.dim, 1)) * np.inf
+        min_coord = np.ones((3, 1)) * np.inf
+        max_coord = -np.ones((3, 1)) * np.inf
 
         for edge, node_type in zip(self.edges, self.edge_node_type):
             for e, node in zip(edge, node_type):
-                min_coord = np.minimum(min_coord, self.coord(node, e))
-                max_coord = np.maximum(max_coord, self.coord(node, e))
+                min_coord = np.minimum(min_coord, self.coords(e, node))
+                max_coord = np.maximum(max_coord, self.coords(e, node))
 
         return np.hstack((min_coord, max_coord))
 
