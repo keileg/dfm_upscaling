@@ -710,6 +710,10 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                 # Loop over the set of pressure values from the previous dimension
                 # Find matches between previous cells and current faces, and assign
                 # boundary conditions
+
+                # Flag for whether the right hand side has non-zero elements
+                trivial_solution = True
+
                 for g_prev, values in prev_values:
                     # Keep track of which cells in g_prev has been used to define bcs in
                     # this gb
@@ -752,12 +756,22 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     # likely, so we will need to debug if this is ever broken
                     assert np.all(found) or np.all(np.logical_not(found))
 
+                    if np.any(found):
+                        # This gb has had boundary conditions transferred from a
+                        # lower-dimensional problem. The solution will not be trivial
+                        trivial_solution = False
+
                 # Get assembler
                 assembler = assembler_map[gb]
-                # This will use the updated values for the boundary conditions
-                A, b = assembler.assemble_matrix_rhs()
-                # Solve and distribute
-                x = sps.linalg.spsolve(A, b)
+                if trivial_solution:
+                    # The solution is known to be zeros
+                    x = np.zeros(assembler.num_dof())
+                else:
+                    # This will use the updated values for the boundary conditions
+                    A, b = assembler.assemble_matrix_rhs()
+                    # Solve and distribute
+                    x = sps.linalg.spsolve(A, b)
+
                 assembler.distribute_variable(x)
 
                 # Avoid this operation for the highest dimensional gb
