@@ -776,7 +776,8 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
 
                 assembler.distribute_variable(x)
 
-                # Avoid this operation for the highest dimensional gb
+                # Postpone this operation for the highest dimensional gb until the
+                # boundary values have been stored for use in transmissibility
                 if gb.dim_max() < local_gb.dim:
                     for g, d in gb:
                         # Reset the boundary conditions in preparation for the next basis
@@ -797,9 +798,15 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
         boundary_assemblers[macro_face] = assembler
         boundary_bc_values[macro_face] = {}
         for g, d in gb:
-            boundary_bc_values[macro_face][g] = d[pp.PARAMETERS]["flow"][
-                "bc_values"
-            ].copy()
+            bc_values = d[pp.PARAMETERS]["flow"]["bc_values"]
+            # Store the boundayr conditions
+            boundary_bc_values[macro_face][g] = bc_values.copy()
+            # Now that the values have been stored, the boundary conditions are deleted
+            # to prepare for the next boundary face.
+            # We could also have put this as an else after the above assginment of
+            # new_prev_val (it would have been equivalent, but the present placement
+            # feels more logical).
+            bc_values[:] = 0
 
     # Use the basis functions to compute transmissibilities for the boundary
     # discretizaiton
