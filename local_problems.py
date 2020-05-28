@@ -442,8 +442,12 @@ def compute_transmissibilies(
         cc = gs.cell_centers
         nc = gs.nodes
 
-        ind_face = reg.surface_node_type[gi].index("face")
-        cfi = reg.surfaces[gi, ind_face]
+        if reg.name == "mpfa":
+            ind_face = reg.surface_node_type[gi].index("face")
+            cfi = reg.surfaces[gi, ind_face]
+        else:
+            cfi = reg.reg_ind
+
         surfaces.append(Surface(cfi, cc, nc, gs.dim))
 
     # Loop over all created surface grids,
