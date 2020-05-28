@@ -150,6 +150,9 @@ class InteractionRegion:
             pts=unique_int_pts[: self.dim],
             edges=unique_int_edges,
         )
+        # Store the mapping from the ordering of the domain boundaries, as represented
+        # in the FractureNetwork, to the ordering of surfaces in this region.
+        self.domain_edges_2_reg_surface = sort_ind
 
         mesh_args = {
             "mesh_size_frac": 0.5,

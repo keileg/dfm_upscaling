@@ -433,7 +433,10 @@ def compute_transmissibilies(
     # Loop over micro domain boundary grids, create a Surface
     for gi, gs in enumerate(micro_domain_boundary):
         # Only consider surfaces on the boundary of the macro domain
-        if not reg.surface_is_boundary[gi]:
+        # The index of the domain boundary is mapped to the numbering of IAreg surfaces
+        # before checking if it is on the macro boundary
+        # TODO: implement the map for 3d regions
+        if not reg.surface_is_boundary[reg.domain_edges_2_reg_surface[gi]]:
             continue
         gs.compute_geometry()
         cc = gs.cell_centers
