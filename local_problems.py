@@ -732,23 +732,24 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
 
                             hit = g.macro_face_ind == macro_face
                             micro_bound_face = g.face_on_macro_bound[hit]
+                            _, micro_fi, micro_sgn = sps.find(
+                                pp.fvutils.scalar_divergence(g)
+                            )
+                            macro_direction = macro_sgn[macro_fi == macro_face][0]
+                            _, in_bound, in_all = np.intersect1d(
+                                micro_bound_face, micro_fi, return_indices=True
+                            )
+                            switch_direction = micro_sgn[in_all] != macro_direction
+                            fix_direction = (2 * switch_direction - 1) * macro_direction
                             if macro_bc.is_dir[macro_face]:
-                                bc_values[micro_bound_face] = macro_sgn[macro_face]
+                                bc_values[micro_bound_face] = fix_direction[in_bound]
+     #                           bc_values[micro_bound_face] = #macro_sgn[macro_face]
                             else:
-                                macro_direction = macro_sgn[macro_fi == macro_face][0]
-                                _, micro_fi, micro_sgn = sps.find(
-                                    pp.fvutils.scalar_divergence(g)
-                                )
-                                _, in_bound, in_all = np.intersect1d(
-                                    micro_bound_face, micro_fi, return_indices=True
-                                )
-
-                                switch_direction = micro_sgn[in_all] != macro_direction
 
                                 #  pdb.set_trace()
                                 bc_values[micro_bound_face] = (
                                     g.face_areas[micro_bound_face]
-                                    * switch_direction[in_bound]
+                                    * fix_direction[in_bound]
                                 )
 
                         cells_found = transfer_bc(g_prev, values, g, bc_values, reg.dim)
@@ -775,6 +776,10 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     A, b = assembler.assemble_matrix_rhs()
                     # Solve and distribute
                     x = sps.linalg.spsolve(A, b)
+
+                import pdb
+
+          #      pdb.set_trace()
 
                 assembler.distribute_variable(x)
 
