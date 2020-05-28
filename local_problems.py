@@ -694,15 +694,6 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
         # Data structure to store the value for the grid bucket set of a lower dimension
         prev_values = []
 
-        # Initialize the computation by putting a unit value in the point.
-        # TODO: This must be expanded in 3d, to account also for the 1d line between
-        # macro face and edge. The values to use here will depend on whether the
-        # condition is Neumann or Dirichlet.
-        for e in edge:
-            gp = pp.PointGrid(e.reshape((-1, 1)))
-            gp.compute_geometry()
-            prev_values.append((gp, np.array([1])))
-
         for gb_set in bucket_list:
             # Data structure to store computed values, that will be used as boundary
             # condition for the next gb_set
@@ -716,7 +707,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                 # boundary conditions
 
                 # Flag for whether the right hand side has non-zero elements
-                trivial_solution = True
+                trivial_solution = False
 
                 for g_prev, values in prev_values:
                     # Keep track of which cells in g_prev has been used to define bcs in
@@ -727,31 +718,6 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     for g, d in gb:
                         # This will update the boundary condition values
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
-
-                        if hasattr(g, "macro_face_ind"):
-
-                            hit = g.macro_face_ind == macro_face
-                            micro_bound_face = g.face_on_macro_bound[hit]
-                            _, micro_fi, micro_sgn = sps.find(
-                                pp.fvutils.scalar_divergence(g)
-                            )
-                            macro_direction = macro_sgn[macro_fi == macro_face][0]
-                            _, in_bound, in_all = np.intersect1d(
-                                micro_bound_face, micro_fi, return_indices=True
-                            )
-                            switch_direction = micro_sgn[in_all] != macro_direction
-                            fix_direction = (2 * switch_direction - 1) * macro_direction
-                            if macro_bc.is_dir[macro_face]:
-                                bc_values[micro_bound_face] = fix_direction[in_bound]
-     #                           bc_values[micro_bound_face] = #macro_sgn[macro_face]
-                            else:
-
-                                #  pdb.set_trace()
-                                bc_values[micro_bound_face] = (
-                                    g.face_areas[micro_bound_face]
-                                    * fix_direction[in_bound]
-                                )
-
                         cells_found = transfer_bc(g_prev, values, g, bc_values, reg.dim)
                         found[cells_found] = True
                     # Verify that either all values in the previous grid has been used
@@ -761,10 +727,33 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     # likely, so we will need to debug if this is ever broken
                     assert np.all(found) or np.all(np.logical_not(found))
 
-                    if np.any(found):
-                        # This gb has had boundary conditions transferred from a
-                        # lower-dimensional problem. The solution will not be trivial
-                        trivial_solution = False
+                for g, d in gb:
+                    if hasattr(g, "macro_face_ind"):
+                        bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
+
+                        hit = g.macro_face_ind == macro_face
+                        micro_bound_face = g.face_on_macro_bound[hit]
+                        _, micro_fi, micro_sgn = sps.find(
+                            pp.fvutils.scalar_divergence(g)
+                        )
+                        macro_direction = macro_sgn[macro_fi == macro_face][0]
+                        _, in_bound, in_all = np.intersect1d(
+                            micro_bound_face, micro_fi, return_indices=True
+                        )
+                        switch_direction = micro_sgn[in_all] != macro_direction
+                        fix_direction = (2 * switch_direction - 1) * macro_direction
+                        if macro_bc.is_dir[macro_face]:
+                            # TODO: Not sure about what to do with the signs here
+                            bc_values[micro_bound_face] = fix_direction[in_bound]
+                            bc_values[micro_bound_face] = macro_sgn[macro_face]
+                           # bc_values[micro_bound_face] = micro_sgn[in_bound]
+                        else:
+
+                            #  pdb.set_trace()
+                            bc_values[micro_bound_face] = (
+                                g.face_areas[micro_bound_face]
+                                * fix_direction[in_bound]
+                            )
 
                 # Get assembler
                 assembler = assembler_map[gb]
@@ -776,10 +765,6 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     A, b = assembler.assemble_matrix_rhs()
                     # Solve and distribute
                     x = sps.linalg.spsolve(A, b)
-
-                import pdb
-
-          #      pdb.set_trace()
 
                 assembler.distribute_variable(x)
 
