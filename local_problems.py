@@ -707,7 +707,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                 # boundary conditions
 
                 # Flag for whether the right hand side has non-zero elements
-                trivial_solution = False
+                trivial_solution = True
 
                 for g_prev, values in prev_values:
                     # Keep track of which cells in g_prev has been used to define bcs in
@@ -726,13 +726,20 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     # It is not 100% clear that this assertion is critical, but it seems
                     # likely, so we will need to debug if this is ever broken
                     assert np.all(found) or np.all(np.logical_not(found))
+                    if np.any(found):
+                        trivial_solution = False
 
                 for g, d in gb:
                     if hasattr(g, "macro_face_ind"):
+                        trivial_solution = False
+                        
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
 
                         # Find those micro faces that form this macro (boundary) face
                         hit = g.macro_face_ind == macro_face
+                        if not np.any(hit):
+                            continue
+                        
                         # Get indices of micro faces on macro boundary
                         micro_bound_face = g.face_on_macro_bound[hit]
                         # Sign of all micro faces
