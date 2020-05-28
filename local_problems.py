@@ -746,13 +746,12 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                             # TODO: Not sure about what to do with the signs here
                             bc_values[micro_bound_face] = fix_direction[in_bound]
                             bc_values[micro_bound_face] = macro_sgn[macro_face]
-                           # bc_values[micro_bound_face] = micro_sgn[in_bound]
+                        # bc_values[micro_bound_face] = micro_sgn[in_bound]
                         else:
 
                             #  pdb.set_trace()
                             bc_values[micro_bound_face] = (
-                                g.face_areas[micro_bound_face]
-                                * fix_direction[in_bound]
+                                g.face_areas[micro_bound_face] * fix_direction[in_bound]
                             )
 
                 # Get assembler
@@ -769,7 +768,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                 assembler.distribute_variable(x)
 
                 # Avoid this operation for the highest dimensional gb
-                if gb.dim_max() <= local_gb.dim:
+                if gb.dim_max() < local_gb.dim:
                     for g, d in gb:
                         # Reset the boundary conditions in preparation for the next basis
                         # function
