@@ -731,25 +731,27 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                     if hasattr(g, "macro_face_ind"):
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
 
+                        # Find those micro faces that form this macro (boundary) face
                         hit = g.macro_face_ind == macro_face
+                        # Get indices of micro faces on macro boundary
                         micro_bound_face = g.face_on_macro_bound[hit]
+                        # Sign of all micro faces
                         _, micro_fi, micro_sgn = sps.find(
                             pp.fvutils.scalar_divergence(g)
                         )
-                        macro_direction = macro_sgn[macro_fi == macro_face][0]
+                        # Micro faces on the boundary
                         _, in_bound, in_all = np.intersect1d(
                             micro_bound_face, micro_fi, return_indices=True
                         )
+                        # Sign convention of this macro face. There should be exactly
+                        # one item in macro_fi for this macro_face.
+                        macro_direction = macro_sgn[macro_fi == macro_face][0]
                         switch_direction = micro_sgn[in_all] != macro_direction
-                        fix_direction = (2 * switch_direction - 1) * macro_direction
+                        fix_direction = -(2 * switch_direction - 1) #* macro_direction
                         if macro_bc.is_dir[macro_face]:
-                            # TODO: Not sure about what to do with the signs here
-                            bc_values[micro_bound_face] = fix_direction[in_bound]
-                            bc_values[micro_bound_face] = macro_sgn[macro_face]
-                        # bc_values[micro_bound_face] = micro_sgn[in_bound]
+                            # For Dirichlet conditions, simply set a unit pressure
+                            bc_values[micro_bound_face] = 1
                         else:
-
-                            #  pdb.set_trace()
                             bc_values[micro_bound_face] = (
                                 g.face_areas[micro_bound_face] * fix_direction[in_bound]
                             )
