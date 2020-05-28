@@ -725,7 +725,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
                             hit = g.macro_face_ind == macro_face
                             micro_bound_face = g.face_on_macro_bound[hit]
                             if macro_bc.is_dir[macro_face]:
-                                bc_values[micro_bound_face] = 1
+                                bc_values[micro_bound_face] = macro_sgn[macro_face]
                             else:
                                 macro_direction = macro_sgn[macro_fi == macro_face][0]
                                 _, micro_fi, micro_sgn = sps.find(
