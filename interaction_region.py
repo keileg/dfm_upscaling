@@ -58,16 +58,29 @@ class InteractionRegion:
     ####################
 
     def mesh(
-        self,
+        self, mesh_args=None
     ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
         """ Create a local mesh for this interaction region.
         """
-        if self.dim == 2:
-            return self._mesh_2d()
-        else:
-            return self._mesh_3d()
+        if mesh_args is None:
 
-    def _mesh_2d(self) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
+            # Find the minimum extent of the domain along coordinate axis, use this to
+            # guide mesh size arguments
+            extent = np.min(np.diff(self.bounding_box(), axis=1)[: self.dim])
+
+            # These are random values, use with care.
+            mesh_args = {
+                "mesh_size_frac": extent / 5,
+                "mesh_size_bound": extent / 2,
+                "mesh_size_min": extent / 10,
+            }
+
+        if self.dim == 2:
+            return self._mesh_2d(mesh_args)
+        else:
+            return self._mesh_3d(mesh_args)
+
+    def _mesh_2d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
         """ To create a local grid bucket in 2d, we should:
             1) Create the bounding surfaces, from self.surfaces
                 i) Find coordinates of all surfaces
@@ -75,7 +88,6 @@ class InteractionRegion:
                 iii) Create a FractureNetwork2d object, create a mesh
 
         """
-
         # First, build points and edges for the domain boundary
         domain_pts = np.zeros((3, 0))
         domain_edges = np.zeros((2, 0), dtype=np.int)
@@ -113,8 +125,9 @@ class InteractionRegion:
                 (constraint_edges, constraint_pts.shape[1] + e)
             )
             # Then add new points
-            constraint_pts = np.hstack((constraint_pts,
-                                        self.coords(constraint, node_type)))
+            constraint_pts = np.hstack(
+                (constraint_pts, self.coords(constraint, node_type))
+            )
 
             edge_2_constraint = np.hstack(
                 (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=np.int))
@@ -154,12 +167,6 @@ class InteractionRegion:
         # in the FractureNetwork, to the ordering of surfaces in this region.
         self.domain_edges_2_reg_surface = sort_ind
 
-        mesh_args = {
-            "mesh_size_frac": 0.5,
-            "mesh_size_bound": 0.5,
-            "mesh_size_min": 0.3,
-        }
-
         file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
@@ -168,7 +175,7 @@ class InteractionRegion:
 
         return gb, network, file_name
 
-    def _mesh_3d(self) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
+    def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
         boundaries: List[np.ndarray] = []
         for surf, node_type in zip(self.surfaces, self.surface_node_type):
@@ -185,12 +192,6 @@ class InteractionRegion:
 
         network = pp.FractureNetwork3d(polygons)
         network.impose_external_boundary(boundaries)
-
-        mesh_args = {
-            "mesh_size_frac": 0.5,
-            "mesh_size_bound": 0.5,
-            "mesh_size_min": 0.3,
-        }
 
         file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
 

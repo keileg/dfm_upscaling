@@ -35,18 +35,22 @@ class LocalGridBucketSet:
         else:
             return [self.line_gb, self.surface_gb, [self.gb]]
 
-    def construct_local_buckets(self):
+    def construct_local_buckets(self, data=None):
+        if data is None:
+            data = {}
 
         if self.dim == 2:
-            self._construct_buckets_2d()
+            self._construct_buckets_2d(data)
         elif self.dim == 3:
-            self._construct_buckets_3d()
+            self._construct_buckets_3d(data)
 
         self._tag_faces_macro_boundary(self.gb)
 
-    def _construct_buckets_2d(self):
+    def _construct_buckets_2d(self, data):
 
-        gb, network, file_name = self.reg.mesh()
+        mesh_args = data.get("mesh_args", None)
+
+        gb, network, file_name = self.reg.mesh(mesh_args)
         self.network = network
         self.gb = gb
         self.file_name = file_name
@@ -101,8 +105,10 @@ class LocalGridBucketSet:
 
         self._recover_line_gb(network, file_name)
 
-    def _construct_buckets_3d(self):
-        gb, network, file_name = self.reg.mesh()
+    def _construct_buckets_3d(self, data):
+        mesh_args = data.get("mesh_args", None)
+
+        gb, network, file_name = self.reg.mesh(mesh_args)
 
         for g, _ in gb:
             if g.dim < self.dim:
