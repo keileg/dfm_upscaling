@@ -686,7 +686,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
 
     # Get the positive direction of the macro faces. This will be needed to compare the
     # signs of the macro and micro faces.
-    _, macro_fi, macro_sgn = sps.find(pp.fvutils.scalar_divergence(coarse_g))
+    _, macro_fi, _ = sps.find(pp.fvutils.scalar_divergence(coarse_g))
 
     boundary_basis_functions = {}
     boundary_assemblers = {}
@@ -746,26 +746,12 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
 
                         # Get indices of micro faces on macro boundary
                         micro_bound_face = g.face_on_macro_bound[hit]
-                        # Sign of all micro faces
-                        _, micro_fi, micro_sgn = sps.find(
-                            pp.fvutils.scalar_divergence(g)
-                        )
-                        # Micro faces on the boundary
-                        _, in_bound, in_all = np.intersect1d(
-                            micro_bound_face, micro_fi, return_indices=True
-                        )
-                        # Sign convention of this macro face. There should be exactly
-                        # one item in macro_fi for this macro_face.
-                        macro_direction = macro_sgn[macro_fi == macro_face][0]
-                        switch_direction = micro_sgn[in_all] != macro_direction
-                        fix_direction = -(2 * switch_direction - 1)  # * macro_direction
+
                         if macro_bc.is_dir[macro_face]:
                             # For Dirichlet conditions, simply set a unit pressure
                             bc_values[micro_bound_face] = 1
                         else:
-                            bc_values[micro_bound_face] = (
-                                g.face_areas[micro_bound_face] * fix_direction[in_bound]
-                            )
+                            bc_values[micro_bound_face] = g.face_areas[micro_bound_face]
 
                 # Get assembler
                 assembler = assembler_map[gb]
@@ -827,4 +813,5 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
         # we skip the sanity check
         sanity_check=False,
     )
+
     return col_ind, row_ind, trm
