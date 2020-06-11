@@ -5,6 +5,9 @@ import numpy as np
 import porepy as pp
 import scipy.sparse as sps
 
+import multiprocessing as mp
+from functools import partial
+
 import interaction_region as ia_reg
 import local_problems
 from local_grid_bucket import LocalGridBucketSet
@@ -66,7 +69,10 @@ class FVDFM(pp.FVElliptic):
 
             param = {"bc": micro_bc}
 
-            perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
+            if g.dim == 2:
+                perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
+            else:
+                perm = pp.SecondOrderTensor(kxx=1e4 * np.ones(g.num_cells))
             param["second_order_tensor"] = perm
 
             pp.initialize_default_data(g, d, self.keyword, param)
@@ -79,7 +85,7 @@ class FVDFM(pp.FVElliptic):
             param = {}
 
             if g1.from_fracture:
-                param["normal_diffusivity"] = 1e-5
+                param["normal_diffusivity"] = 1e4
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -139,72 +145,37 @@ class FVDFM(pp.FVElliptic):
         parameter_dictionary = data[pp.PARAMETERS][self.keyword]
         matrix_dictionary = data[pp.DISCRETIZATION_MATRICES][self.keyword]
 
-        # Allocate the data to store matrix entries, that's an efficient
-        # way to create a sparse matrix.
+        micro_network = parameter_dictionary[self.network_keyword]
+
+        num_processes = data.get("num_processes", 1)
+        discr_ig = partial(self._discretize_interaction_region, g, micro_network, parameter_dictionary)
+        if num_processes == 1:
+            # run the code in serial, useful also for debug
+            out = [discr_ig(reg) for reg in self._interaction_regions(g)]
+        else:
+            # run the code in parallel
+            with mp.Pool(processes=num_processes) as p:
+                out = p.map(discr_ig, list(self._interaction_regions(g)))
 
         # Data structures to build up the flux discretization as a sparse coo-matrix
-        rows, cols, data = [], [], []
+        rows_flux, cols_flux, data_flux = [], [], []
 
         # Data structures for the discretization of boundary conditions
         rows_bound, cols_bound, data_bound = [], [], []
 
-        micro_network = parameter_dictionary[self.network_keyword]
+        # unpack all the values
+        for fi, ci, trm, ri_bound, ci_bound, trm_bound in out:
+            rows_flux += fi
+            cols_flux += ci
+            data_flux += trm
 
-        # This for-loop could be parallelized. TODO
-        for reg in self._interaction_regions(g):
-
-            # Add the fractures to be upscaled
-            self._add_network_to_upscale(reg, micro_network)
-
-            # construct the sequence of local grid buckets
-            gb_set = LocalGridBucketSet(g.dim, reg)
-            gb_set.construct_local_buckets()
-
-            # First basis functions for local problems
-            (
-                basis_functions,
-                cc_assembler,
-                cc_bc_values,
-            ) = local_problems.cell_basis_functions(
-                reg, gb_set, self, parameter_dictionary
-            )
-            # TODO: Operator to reconstruct boundary pressure from the basis functions
-
-            # Call method to transfer basis functions to transmissibilties over coarse
-            # edges
-            ci, fi, trm = local_problems.compute_transmissibilies(
-                reg,
-                gb_set,
-                basis_functions,
-                cc_assembler,
-                cc_bc_values,
-                g,
-                self,
-                parameter_dictionary,
-            )
-
-            if len(fi) > 0:
-                rows += fi
-                cols += ci
-                data += trm
-
-            #
-            (
-                ci_bound,
-                ri_bound,
-                trm_bound,
-            ) = local_problems.discretize_boundary_conditions(
-                reg, gb_set, self, parameter_dictionary, g
-            )
-
-            if len(ri_bound) > 0:
-                rows_bound += ri_bound
-                cols_bound += ci_bound
-                data_bound += trm_bound
+            rows_bound += ri_bound
+            cols_bound += ci_bound
+            data_bound += trm_bound
 
         # Construct the global matrix
         flux = sps.coo_matrix(
-            (data, (rows, cols)), shape=(g.num_faces, g.num_cells)
+            (data_flux, (rows_flux, cols_flux)), shape=(g.num_faces, g.num_cells)
         ).tocsr()
 
         # Construct the global flux matrix
@@ -243,6 +214,47 @@ class FVDFM(pp.FVElliptic):
         else:
             raise ValueError
 
+    def _discretize_interaction_region(self, g, micro_network, parameter_dictionary, reg):
+
+        # Add the fractures to be upscaled
+        self._add_network_to_upscale(reg, micro_network)
+
+        # construct the sequence of local grid buckets
+        gb_set = LocalGridBucketSet(g.dim, reg)
+        gb_set.construct_local_buckets()
+
+        # First basis functions for local problems
+        (
+            basis_functions,
+            cc_assembler,
+            cc_bc_values,
+        ) = local_problems.cell_basis_functions(
+            reg, gb_set, self, parameter_dictionary
+        )
+        # TODO: Operator to reconstruct boundary pressure from the basis functions
+
+        # Call method to transfer basis functions to transmissibilties over coarse
+        # edges
+        ci, fi, trm = local_problems.compute_transmissibilies(
+            reg,
+            gb_set,
+            basis_functions,
+            cc_assembler,
+            cc_bc_values,
+            g,
+            self,
+            parameter_dictionary,
+        )
+
+        (
+            ci_bound,
+            ri_bound,
+            trm_bound,
+        ) = local_problems.discretize_boundary_conditions(
+            reg, gb_set, self, parameter_dictionary, g
+        )
+
+        return fi, ci, trm, ri_bound, ci_bound, trm_bound
 
 class Tpfa_DFM(FVDFM):
     """
@@ -256,7 +268,6 @@ class Tpfa_DFM(FVDFM):
     def _interaction_regions(self, g):
         for fi in range(g.num_faces):
             yield ia_reg.extract_tpfa_regions(g, fi)[0]
-
 
 class Mpfa_DFM(FVDFM):
     """
