@@ -218,7 +218,7 @@ class FVDFM(pp.FVElliptic):
         neumann_faces = np.where(bc.is_neu)[0]
         pp.fvutils.zero_out_sparse_rows(flux, neumann_faces)
         # Not sure about sign here
-        pp.fvutils.zero_out_sparse_rows(bound_flux, neumann_faces, -1)
+        bound_flux = pp.fvutils.zero_out_sparse_rows(bound_flux, neumann_faces, diag=1)
 
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
