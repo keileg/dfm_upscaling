@@ -167,7 +167,7 @@ class InteractionRegion:
         # in the FractureNetwork, to the ordering of surfaces in this region.
         self.domain_edges_2_reg_surface = sort_ind
 
-        file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
+        file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
             mesh_args=mesh_args, file_name=file_name, constraints=edge_2_constraint
@@ -193,7 +193,7 @@ class InteractionRegion:
         network = pp.FractureNetwork3d(polygons)
         network.impose_external_boundary(boundaries)
 
-        file_name = "gmsh_upscaling_region_" + str(self.reg_ind)
+        file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
             mesh_args=mesh_args, file_name=file_name, constraints=constraint_inds
