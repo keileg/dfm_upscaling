@@ -69,10 +69,8 @@ class FVDFM(pp.FVElliptic):
 
             param = {"bc": micro_bc}
 
-            if g.dim == 2:
-                perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
-            else:
-                perm = pp.SecondOrderTensor(kxx=1e4 * np.ones(g.num_cells))
+            perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
+
             param["second_order_tensor"] = perm
 
             pp.initialize_default_data(g, d, self.keyword, param)
