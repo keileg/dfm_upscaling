@@ -181,6 +181,9 @@ class InteractionRegion:
         for surf, node_type in zip(self.surfaces, self.surface_node_type):
             boundaries.append(self.coords(surf, node_type))
 
+        # The ordering of the network boundary surfaces is the same as for the IAreg
+        self.domain_edges_2_reg_surface = np.arange(len(boundaries))
+
         constraints: List[np.ndarray] = []
 
         for constraint, node_type in zip(self.constraints, self.constraint_node_type):

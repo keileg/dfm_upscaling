@@ -405,7 +405,7 @@ def compute_transmissibilies(
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
         )
 
     # In the main loop over micro surface grids below, we need access to a limited set
@@ -440,7 +440,6 @@ def compute_transmissibilies(
         # Only consider surfaces on the boundary of the macro domain
         # The index of the domain boundary is mapped to the numbering of IAreg surfaces
         # before checking if it is on the macro boundary
-        # TODO: implement the map for 3d regions
         gi_in_reg = reg.domain_edges_2_reg_surface[gi]
 
         if not reg.surface_is_boundary[gi_in_reg]:
