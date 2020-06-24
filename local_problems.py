@@ -95,8 +95,8 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
     # If the surface is of co-dimension 2 (will be a line in 3d), we project the points
     # to the line
     elif dim_of_sp < spatial_dim - 1:
-        # Center point on the line
-        ind = np.argmax(np.sum(np.abs(sp - cp), axis=1))
+        # Point furthest away from the center point
+        ind = np.argmax(np.sum(np.abs(sp - cp), axis=0))
 
         # Normalized vector along the line
         vec_on_line = (
@@ -110,13 +110,16 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
         not_on_cp = np.where(nrm > tol)[0]
         vec_cp_p[:, not_on_cp] /= nrm[not_on_cp]
 
+        cross = np.array(
+            [
+                vec_on_line[1] * vec_cp_p[2] - vec_on_line[2] * vec_cp_p[1],
+                vec_on_line[2] * vec_cp_p[0] - vec_on_line[0] * vec_cp_p[2],
+                vec_on_line[0] * vec_cp_p[1] - vec_on_line[1] * vec_cp_p[0],
+            ]
+        )
+
         # Points on the line - although we call it a plane to be consistent with below
-        in_plane = np.where(
-            np.logical_or(
-                np.logical_not(not_on_cp),
-                np.abs(np.sum(vec_on_line * vec_cp_p, axis=0)) < tol,
-            )
-        )[0]
+        in_plane = np.where(np.sum(np.abs(cross), axis=0) < tol)[0]
 
     # Here we will find the normal vector, and find points in the plane by a dot product
     else:
