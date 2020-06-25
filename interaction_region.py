@@ -230,8 +230,12 @@ class InteractionRegion:
         edges: Optional[np.ndarray] = None,
         fractures: Optional[List] = None,
     ) -> None:
+
         if self.dim == 3:
-            self.fractures = fractures
+            fracs = []
+            for f in fractures:
+                fracs.append(f.copy())
+            self.fractures = fracs
         else:
             if points.shape[0] == 2:
                 points = np.vstack((points, np.zeros(points.shape[1])))
