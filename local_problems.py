@@ -221,6 +221,18 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
     coarse_assembler = {}
     coarse_bc_values = {}
 
+    # Store the sum of basis functions for all subproblems. Useful to ensure partition
+    # of unity for the boundary problems in addition to the main check for the basis
+    # functions.
+    debug_pou_map = {}
+    for gb_set in bucket_list:
+        for gb in gb_set:
+            for g, _ in gb:
+                debug_pou_map[g] = np.zeros(g.num_cells)
+            for e, d in gb.edges():
+                mg = d["mortar_grid"]
+                debug_pou_map[e] = np.zeros(mg.num_cells)
+
     # There is one basis function per coarse degree of freedom
     for coarse_ind, coarse_cc in zip(coarse_cell_ind, coarse_cell_cc.T):
 
@@ -292,14 +304,19 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
 
                 assembler.distribute_variable(x)
 
+                for g, d in gb:
+                    debug_pou_map[g] += d[pp.STATE][discr.cell_variable]
+                for e, d in gb.edges():
+                    debug_pou_map[e] += d[pp.STATE][discr.mortar_variable]
+
                 # Avoid this operation for the highest dimensional gb
                 if gb.dim_max() < local_gb.dim:
                     for g, d in gb:
-                        # Reset the boundary conditions in preparation for the next basis
-                        # function
+                        # Reset the boundary conditions in preparation for the next
+                        # basis function
                         d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
-                        # Store the pressure values to be used as new boundary conditions
-                        # for the problem with one dimension more
+                        # Store the pressure values to be used as new boundary
+                        # conditions for the problem with one dimension more
                         new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
 
             # We are done with all buckets of this dimension. Redefine the current
