@@ -194,12 +194,20 @@ class InteractionRegion:
         constraint_inds = len(self.fractures) + np.arange(len(constraints))
 
         network = pp.FractureNetwork3d(polygons)
-        network.impose_external_boundary(boundaries)
+        ind_map = network.impose_external_boundary(boundaries)
+
+        updated_constraint_inds = []
+        for ci in constraint_inds:
+            ui = np.where(ind_map == ci)[0]
+            assert ui.size == 1
+            updated_constraint_inds.append(ui[0])
 
         file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
-            mesh_args=mesh_args, file_name=file_name, constraints=constraint_inds
+            mesh_args=mesh_args,
+            file_name=file_name,
+            constraints=updated_constraint_inds,
         )
 
         return gb, network, file_name
