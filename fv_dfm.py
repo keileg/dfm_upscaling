@@ -82,7 +82,7 @@ class FVDFM(pp.FVElliptic):
 
             param = {}
 
-            if g1.from_fracture:
+            if not hasattr(g1, "is_auxiliary") or not g1.is_auxiliary:
                 param["normal_diffusivity"] = 1e4
 
             pp.initialize_data(mg, d, self.keyword, param)
@@ -106,11 +106,19 @@ class FVDFM(pp.FVElliptic):
         # point, but that should be a technical detail.
         fine_scale_dicsr = pp.Mpfa(self.keyword)
 
+        void_discr = pp.EllipticDiscretizationZeroPermeability(self.keyword)
+
         for g, d in gb:
             d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
-            d[pp.DISCRETIZATION] = {
-                self.cell_variable: {self.cell_discr: fine_scale_dicsr}
-            }
+            if hasattr(g, "is_auxiliary") and g.is_auxiliary:
+                d[pp.DISCRETIZATION] = {
+                    self.cell_variable: {self.cell_discr: void_discr}
+                }
+            #                print(g.cell_centers)
+            else:
+                d[pp.DISCRETIZATION] = {
+                    self.cell_variable: {self.cell_discr: fine_scale_dicsr}
+                }
             d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
 
         # Loop over the edges in the GridBucket, define primary variables and discretizations
@@ -119,12 +127,12 @@ class FVDFM(pp.FVElliptic):
             d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
             # The type of lower-dimensional discretization depends on whether this is a
             # (part of a) fracture, or a transition between two line or surface grids.
-            if g1.from_fracture:
-                mortar_discr = pp.RobinCoupling(
-                    self.keyword, fine_scale_dicsr, fine_scale_dicsr
+            if hasattr(g1, "is_auxiliary") and g1.is_auxiliary:
+                mortar_discr = pp.FluxPressureContinuity(
+                    self.keyword, fine_scale_dicsr, void_discr
                 )
             else:
-                mortar_discr = pp.FluxPressureContinuity(
+                mortar_discr = pp.RobinCoupling(
                     self.keyword, fine_scale_dicsr, fine_scale_dicsr
                 )
 
@@ -146,7 +154,9 @@ class FVDFM(pp.FVElliptic):
         micro_network = parameter_dictionary[self.network_keyword]
 
         num_processes = data.get("num_processes", 1)
-        discr_ig = partial(self._discretize_interaction_region, g, micro_network, parameter_dictionary)
+        discr_ig = partial(
+            self._discretize_interaction_region, g, micro_network, parameter_dictionary
+        )
         if num_processes == 1:
             # run the code in serial, useful also for debug
             out = [discr_ig(reg) for reg in self._interaction_regions(g)]
@@ -212,7 +222,9 @@ class FVDFM(pp.FVElliptic):
         else:
             raise ValueError
 
-    def _discretize_interaction_region(self, g, micro_network, parameter_dictionary, reg):
+    def _discretize_interaction_region(
+        self, g, micro_network, parameter_dictionary, reg
+    ):
 
         # Add the fractures to be upscaled
         self._add_network_to_upscale(reg, micro_network)
@@ -226,9 +238,7 @@ class FVDFM(pp.FVElliptic):
             basis_functions,
             cc_assembler,
             cc_bc_values,
-        ) = local_problems.cell_basis_functions(
-            reg, gb_set, self, parameter_dictionary
-        )
+        ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
         # TODO: Operator to reconstruct boundary pressure from the basis functions
 
         # Call method to transfer basis functions to transmissibilties over coarse
@@ -254,6 +264,7 @@ class FVDFM(pp.FVElliptic):
 
         return fi, ci, trm, ri_bound, ci_bound, trm_bound
 
+
 class Tpfa_DFM(FVDFM):
     """
     Define the specific class for tpfa upscaling
@@ -266,6 +277,7 @@ class Tpfa_DFM(FVDFM):
     def _interaction_regions(self, g):
         for fi in range(g.num_faces):
             yield ia_reg.extract_tpfa_regions(g, fi)[0]
+
 
 class Mpfa_DFM(FVDFM):
     """
