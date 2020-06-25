@@ -342,16 +342,21 @@ class LocalGridBucketSet:
         )[0]
 
         # Assign the 0d grids an attribute g.from_fracture, depending on whether it
-        # coincides with a fracture or is an auxiliary point
+        # coincides with a fracture or is an auxiliary point.
+        # Also add a tag that identifies the grids as auxiliary on not - this will be
+        # used to assign discretizations for the subproblems.
         for g in g_0d_frac_bound:
             g.from_fracture = True
+            g.is_auxiliary = False
 
         for g in g_0d_domain_boundary:
             g.from_fracture = False
+            g.is_auxiliary = True
 
         for g in g_1d:
             g.compute_geometry()
             g.from_fracture = False
+            g.is_auxiliary = False
 
         # A map from fracture points on the domain boundary to the 0d grids.
         # The keys are the indexes in the decomposition of the network.
@@ -651,16 +656,21 @@ class LocalGridBucketSet:
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
 
-        # Assign the 1d and 0d grids an attribute g.from_fracture, depending on whether
-        # they coincide with a fracture or are auxiliary
+        # Assign the 1d and 0d grids an attribute g.from_fracture, depending on 
+        # wether they coincide with a fracture or are auxiliary.
+        # Also add a tag that identifies the grids as auxiliary on not - this will be
+        # used to assign discretizations for the subproblems.        
         for g in g_1d:
             g.from_fracture = True
+            g.is_auxiliary = False
 
         for g in g_1d_auxiliary:
             g.from_fracture = False
+            g.is_auxiliary = True
 
         for g in g_0d:
             g.from_fracture = True
+            g.is_auxiliary = False
 
         # Map from the fracture boundary points, in the network decomposition index, to
         # the corresponding 0d grids
