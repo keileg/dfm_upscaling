@@ -171,15 +171,23 @@ class FVDFM(pp.FVElliptic):
         # Data structures for the discretization of boundary conditions
         rows_bound, cols_bound, data_bound = [], [], []
 
-        # unpack all the values
-        for fi, ci, trm, ri_bound, ci_bound, trm_bound in out:
-            rows_flux += fi
-            cols_flux += ci
-            data_flux += trm
+        # data structures for discretization of pressure trace operator on macro boundaries
+        rows_cell_trace, cols_cell_trace, data_cell_trace = [], [], []
 
-            rows_bound += ri_bound
-            cols_bound += ci_bound
-            data_bound += trm_bound
+        # unpack all the values
+        for reg_values in out:
+            cell, bound, cell_trace = reg_values
+            cols_flux += cell[0]
+            rows_flux += cell[1]
+            data_flux += cell[2]
+
+            cols_bound += bound[0]
+            rows_bound += bound[1]
+            data_bound += bound[2]
+
+            cols_cell_trace += cell_trace[0]
+            rows_cell_trace += cell_trace[1]
+            data_cell_trace += cell_trace[2]
 
         # Construct the global matrix
         flux = sps.coo_matrix(
@@ -189,6 +197,11 @@ class FVDFM(pp.FVElliptic):
         # Construct the global flux matrix
         bound_flux = sps.coo_matrix(
             (data_bound, (rows_bound, cols_bound)), shape=(g.num_faces, g.num_faces)
+        ).tocsr()
+
+        bound_pressure_cell = sps.coo_matrix(
+            (data_cell_trace, (rows_cell_trace, cols_cell_trace)),
+            shape=(g.num_faces, g.num_faces),
         ).tocsr()
 
         # For Neumann boundaries, we should not use the flux discretization (the flux
@@ -201,6 +214,7 @@ class FVDFM(pp.FVElliptic):
 
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
+        matrix_dictionary[self.bound_pressure_cell_matrix_key] = bound_pressure_cell
 
         # Empty discretization of vector sources - we will not provide this for the
         # foreseeable future.
@@ -239,11 +253,10 @@ class FVDFM(pp.FVElliptic):
             cc_assembler,
             cc_bc_values,
         ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
-        # TODO: Operator to reconstruct boundary pressure from the basis functions
 
         # Call method to transfer basis functions to transmissibilties over coarse
         # edges
-        ci, fi, trm = local_problems.compute_transmissibilies(
+        trm_cell = local_problems.compute_transmissibilies(
             reg,
             gb_set,
             basis_functions,
@@ -254,15 +267,15 @@ class FVDFM(pp.FVElliptic):
             parameter_dictionary,
         )
 
-        (
-            ci_bound,
-            ri_bound,
-            trm_bound,
-        ) = local_problems.discretize_boundary_conditions(
+        matrix_bound_pressure_cell = local_problems.discretize_pressure_trace_macro_bound(
+            g, gb_set, self, cc_assembler, basis_functions
+        )
+
+        (trm_boundary) = local_problems.discretize_boundary_conditions(
             reg, gb_set, self, parameter_dictionary, g
         )
 
-        return fi, ci, trm, ri_bound, ci_bound, trm_bound
+        return trm_cell, trm_boundary, matrix_bound_pressure_cell
 
 
 class Tpfa_DFM(FVDFM):

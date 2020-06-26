@@ -361,6 +361,46 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
     return basis_functions, coarse_assembler, coarse_bc_values
 
 
+def discretize_pressure_trace_macro_bound(
+    macro_g, local_gb, discr, cc_assembler, basis_functions
+):
+    row, col, val = [], [], []
+
+    gb = local_gb.bucket_list()[-1][0]
+    # For now only consider the highest dimensional grids. We could also include cells
+    # on fractures touching the micro boundary, but that would require a more ellaborate
+    # area weighting (including the aperture of the micro fracture)
+    micro_g = gb.grids_of_dimension(gb.dim_max())[0]
+
+    if hasattr(micro_g, "macro_face_ind") and micro_g.macro_face_ind.size > 0:
+
+        d = gb.node_props(micro_g)
+
+        for coarse_cell, assembler in cc_assembler.items():
+            basis = basis_functions[coarse_cell]
+            assembler.distribute_variable(basis)
+
+            micro_matrix_dictionary = d[pp.DISCRETIZATION_MATRICES][discr.keyword]
+
+            micro_bound_pressure_cell = micro_matrix_dictionary[
+                discr.bound_pressure_cell_matrix_key
+            ]
+
+            p = d[pp.STATE][discr.cell_variable]
+            micro_boundary_pressure = micro_bound_pressure_cell * p
+
+            row += list(micro_g.macro_face_ind)
+            col += micro_g.macro_face_ind.size * [coarse_cell]
+            scaled_vals = (
+                p[micro_g.face_on_macro_bound]
+                * micro_g.face_areas[micro_g.face_on_macro_bound]
+                / macro_g.face_areas[micro_g.macro_face_ind]
+            )
+            val += list(scaled_vals)
+
+    return col, row, val
+
+
 def compute_transmissibilies(
     reg,
     local_gb,
