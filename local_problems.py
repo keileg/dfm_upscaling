@@ -382,15 +382,19 @@ def discretize_pressure_trace_macro_bound(
 
             micro_matrix_dictionary = d[pp.DISCRETIZATION_MATRICES][discr.keyword]
 
-            micro_bound_pressure_cell = micro_matrix_dictionary[
+            # Map from micro cells to the boundary conditions
+            micro_bound_pressure_map = micro_matrix_dictionary[
                 discr.bound_pressure_cell_matrix_key
             ]
 
+            # the cell variable carries the micro basis functions, both if this is a
+            # cell or a boundary face discretization
             p = d[pp.STATE][discr.cell_variable]
-            micro_boundary_pressure = micro_bound_pressure_cell * p
+            micro_boundary_pressure = micro_bound_pressure_map * p
 
             row += list(micro_g.macro_face_ind)
             col += micro_g.macro_face_ind.size * [coarse_cell]
+            # Use an area-weighted pressure reconstruction
             scaled_vals = (
                 p[micro_g.face_on_macro_bound]
                 * micro_g.face_areas[micro_g.face_on_macro_bound]
@@ -656,7 +660,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
     reg_bound_surface: np.ndarray = np.where(reg.surface_is_boundary)[0]
     if reg_bound_surface.size == 0:
         # Nothing to do here
-        return [], [], []
+        return ([], [], []), ([], [], [])
 
     # Data structure to store Assembler of each grid bucket
     assembler_map = {}
@@ -874,4 +878,8 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
         sanity_check=False,
     )
 
-    return col_ind, row_ind, trm
+    trace_discr = discretize_pressure_trace_macro_bound(
+        coarse_g, local_gb, discr, boundary_assemblers, boundary_basis_functions
+    )
+
+    return (col_ind, row_ind, trm), trace_discr

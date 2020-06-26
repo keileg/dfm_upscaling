@@ -173,10 +173,11 @@ class FVDFM(pp.FVElliptic):
 
         # data structures for discretization of pressure trace operator on macro boundaries
         rows_cell_trace, cols_cell_trace, data_cell_trace = [], [], []
+        rows_face_trace, cols_face_trace, data_face_trace = [], [], []
 
         # unpack all the values
         for reg_values in out:
-            cell, bound, cell_trace = reg_values
+            cell, bound, cell_trace, face_trace = reg_values
             cols_flux += cell[0]
             rows_flux += cell[1]
             data_flux += cell[2]
@@ -188,6 +189,10 @@ class FVDFM(pp.FVElliptic):
             cols_cell_trace += cell_trace[0]
             rows_cell_trace += cell_trace[1]
             data_cell_trace += cell_trace[2]
+
+            cols_face_trace += face_trace[0]
+            rows_face_trace += face_trace[1]
+            data_face_trace += face_trace[2]
 
         # Construct the global matrix
         flux = sps.coo_matrix(
@@ -204,6 +209,11 @@ class FVDFM(pp.FVElliptic):
             shape=(g.num_faces, g.num_faces),
         ).tocsr()
 
+        bound_pressure_face = sps.coo_matrix(
+            (data_face_trace, (rows_face_trace, cols_face_trace)),
+            shape=(g.num_faces, g.num_faces),
+        ).tocsr()
+
         # For Neumann boundaries, we should not use the flux discretization (the flux
         # is known). The boundary discretization is modified to simply reuse the flux.
         bc = parameter_dictionary["bc"]
@@ -215,6 +225,7 @@ class FVDFM(pp.FVElliptic):
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
         matrix_dictionary[self.bound_pressure_cell_matrix_key] = bound_pressure_cell
+        matrix_dictionary[self.bound_pressure_face_matrix_key] = bound_pressure_face
 
         # Empty discretization of vector sources - we will not provide this for the
         # foreseeable future.
@@ -271,11 +282,19 @@ class FVDFM(pp.FVElliptic):
             g, gb_set, self, cc_assembler, basis_functions
         )
 
-        (trm_boundary) = local_problems.discretize_boundary_conditions(
+        (
+            trm_boundary,
+            matrix_bound_pressure_face,
+        ) = local_problems.discretize_boundary_conditions(
             reg, gb_set, self, parameter_dictionary, g
         )
 
-        return trm_cell, trm_boundary, matrix_bound_pressure_cell
+        return (
+            trm_cell,
+            trm_boundary,
+            matrix_bound_pressure_cell,
+            matrix_bound_pressure_face,
+        )
 
 
 class Tpfa_DFM(FVDFM):
