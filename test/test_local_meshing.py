@@ -141,7 +141,7 @@ class TestMeshing(unittest.TestCase):
         )
         reg.add_fractures(fractures=[frac])
         reg.mesh()
-        
+
     def test_3d_boundary_mpfa_with_fracture(self):
         g = create_grids.cart_3d()
 
@@ -151,7 +151,7 @@ class TestMeshing(unittest.TestCase):
             np.array([[0.0, 0.3, 0.3, 0.0], [1.1, 1.1, 1.1, 1.1], [0.2, 0.2, 0.8, 0.8]])
         )
         reg.add_fractures(fractures=[frac])
-        reg.mesh()        
+        reg.mesh()
 
 
 if __name__ == "__main__":

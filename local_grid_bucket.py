@@ -656,10 +656,10 @@ class LocalGridBucketSet:
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
 
-        # Assign the 1d and 0d grids an attribute g.from_fracture, depending on 
+        # Assign the 1d and 0d grids an attribute g.from_fracture, depending on
         # wether they coincide with a fracture or are auxiliary.
         # Also add a tag that identifies the grids as auxiliary on not - this will be
-        # used to assign discretizations for the subproblems.        
+        # used to assign discretizations for the subproblems.
         for g in g_1d:
             g.from_fracture = True
             g.is_auxiliary = False

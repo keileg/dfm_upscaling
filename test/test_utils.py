@@ -8,6 +8,7 @@ Created on Tue Mar  3 09:38:54 2020
 
 import numpy as np
 
+
 def compare_arrays(a, b, tol=1e-4, sort=True):
     """ Compare two arrays and check that they are equal up to a column permutation.
 
@@ -41,28 +42,28 @@ def compare_arrays(a, b, tol=1e-4, sort=True):
             return False
     return True
 
+
 def compare_arrays_varying_size(a, b, tol=1e-4, sort=True):
-    
+
     if not np.all(a.shape == b.shape):
         return False
-    
+
     if sort:
         for i in range(a.shape[-1]):
             a[i] = np.sort(a[i])
         for i in range(b.shape[-1]):
             b[i] = np.sort(b[i])
-            
+
     for ia in range(a.shape[0]):
         a_found = False
         for ib in range(b.shape[0]):
             if a[ia].size != b[ib].size:
                 continue
-            dist = np.sum((a[ia] - b[ib])**2)
-            if dist < tol**2:
+            dist = np.sum((a[ia] - b[ib]) ** 2)
+            if dist < tol ** 2:
                 a_found = True
-                
+
         if not a_found:
             return False
-        
+
     return True
-    

@@ -40,14 +40,18 @@ class TestLocalProblems(unittest.TestCase):
         internal_nodes = [4]
         self._check_partition_unity(g, internal_nodes, Mpfa_DFM(), pts, edges)
 
-    def test_partition_unity_tpfa_single_boundary_intersecting_local_micro_fracture(self):
+    def test_partition_unity_tpfa_single_boundary_intersecting_local_micro_fracture(
+        self,
+    ):
         g = create_grids.cart_2d()
         pts = np.array([[0.7, 0.9], [1.1, 1.4]])
         edges = np.array([[0], [1]])
         internal_faces = [4]
         self._check_partition_unity(g, internal_faces, Tpfa_DFM(), pts, edges)
 
-    def test_partition_unity_mpfa_single_boundary_intersecting_local_micro_fracture(self):
+    def test_partition_unity_mpfa_single_boundary_intersecting_local_micro_fracture(
+        self,
+    ):
         g = create_grids.cart_2d()
         pts = np.array([[0.7, 0.9], [0.475, 1.4]])
         edges = np.array([[0], [1]])
@@ -56,48 +60,46 @@ class TestLocalProblems(unittest.TestCase):
 
     def test_partition_unity_tpfa_multiple_local_micro_fractures(self):
         g = create_grids.cart_2d()
-        pts = np.array([[0.8, 1.2, 0.8, 1.1],
-                        [1.3, 1.6, 1.6, 1.8]])
+        pts = np.array([[0.8, 1.2, 0.8, 1.1], [1.3, 1.6, 1.6, 1.8]])
         edges = np.array([[0, 2], [1, 3]])
         internal_faces = [4]
         self._check_partition_unity(g, internal_faces, Tpfa_DFM(), pts, edges)
 
     def test_partition_unity_mpfa_multiple_local_micro_fractures(self):
         g = create_grids.cart_2d()
-        pts = np.array([[0.6, 1.2, 1.2, 0.6],
-                        [0.6, 0.8, 1.2, 1.4]])
+        pts = np.array([[0.6, 1.2, 1.2, 0.6], [0.6, 0.8, 1.2, 1.4]])
         edges = np.array([[0, 2], [1, 3]])
         internal_nodes = [4]
         self._check_partition_unity(g, internal_nodes, Mpfa_DFM(), pts, edges)
 
     def test_partition_unity_tpfa_multiple_intersecting_local_micro_fractures(self):
         g = create_grids.cart_2d()
-        pts = np.array([[0.8, 1.2, 1.1, 1.1],
-                        [1.3, 1.6, 1.4, 1.8]])
+        pts = np.array([[0.8, 1.2, 1.1, 1.1], [1.3, 1.6, 1.4, 1.8]])
         edges = np.array([[0, 2], [1, 3]])
         internal_faces = [4]
         self._check_partition_unity(g, internal_faces, Tpfa_DFM(), pts, edges)
 
     def test_partition_unity_mpfa_multiple_intersecting_local_micro_fractures(self):
         g = create_grids.cart_2d()
-        pts = np.array([[0.6, 1.2, 0.6, 1.2],
-                        [0.6, 0.8, 1.2, 0.6]])
+        pts = np.array([[0.6, 1.2, 0.6, 1.2], [0.6, 0.8, 1.2, 0.6]])
         edges = np.array([[0, 2], [1, 3]])
         internal_nodes = [4]
         self._check_partition_unity(g, internal_nodes, Mpfa_DFM(), pts, edges)
 
-    def test_partition_unity_tpfa_multiple_boundary_intersecting_local_micro_fracture(self):
+    def test_partition_unity_tpfa_multiple_boundary_intersecting_local_micro_fracture(
+        self,
+    ):
         g = create_grids.cart_2d()
-        pts = np.array([[0.7, 0.9, 0.815, 0.95],
-                        [1.1, 1.4, 1.35 , 1]])
+        pts = np.array([[0.7, 0.9, 0.815, 0.95], [1.1, 1.4, 1.35, 1]])
         edges = np.array([[0, 2], [1, 3]])
         internal_faces = [4]
         self._check_partition_unity(g, internal_faces, Tpfa_DFM(), pts, edges)
 
-    def test_partition_unity_mpfa_multiple_boundary_intersecting_local_micro_fracture(self):
+    def test_partition_unity_mpfa_multiple_boundary_intersecting_local_micro_fracture(
+        self,
+    ):
         g = create_grids.cart_2d()
-        pts = np.array([[0.7  , 0.9, 0.6, 1.6],
-                        [0.475, 1.4, 0.8, 0.8]])
+        pts = np.array([[0.7, 0.9, 0.6, 1.6], [0.475, 1.4, 0.8, 0.8]])
         edges = np.array([[0, 2], [1, 3]])
         internal_nodes = [4]
         self._check_partition_unity(g, internal_nodes, Mpfa_DFM(), pts, edges)
@@ -116,10 +118,11 @@ class TestLocalProblems(unittest.TestCase):
         internal_nodes = [4]
         self._check_partition_unity(g, internal_nodes, Mpfa_DFM(), pts, edges)
 
-    def test_partition_unity_tpfa_multiple_boundary_intersecting_local_micro_fracture_at_coarse_interface(self):
+    def test_partition_unity_tpfa_multiple_boundary_intersecting_local_micro_fracture_at_coarse_interface(
+        self,
+    ):
         g = create_grids.cart_2d()
-        pts = np.array([[0.8, 1.2, 0.8, 1.2],
-                        [1.2, 1.8, 1.4, 1.6]])
+        pts = np.array([[0.8, 1.2, 0.8, 1.2], [1.2, 1.8, 1.4, 1.6]])
         edges = np.array([[0, 2], [1, 3]])
         internal_faces = [4]
         self._check_partition_unity(g, internal_faces, Tpfa_DFM(), pts, edges)
@@ -136,11 +139,18 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, cc_bc_values = lp.cell_basis_functions(
-                    reg, local_gb, discr, {'bc': macro_bc}
+                    reg, local_gb, discr, {"bc": macro_bc}
                 )
 
                 _, _, trm = lp.compute_transmissibilies(
-                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr, {'bc': macro_bc}
+                    reg,
+                    local_gb,
+                    basis_functions,
+                    cc_assembler,
+                    cc_bc_values,
+                    g,
+                    discr,
+                    {"bc": macro_bc},
                 )
 
                 self.assertTrue(np.allclose(np.abs(trm), 1))
@@ -158,11 +168,18 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, cc_bc_values = lp.cell_basis_functions(
-                    reg, local_gb, discr, {'bc': macro_bc}
+                    reg, local_gb, discr, {"bc": macro_bc}
                 )
 
                 _, _, trm = lp.compute_transmissibilies(
-                    reg, local_gb, basis_functions, cc_assembler, cc_bc_values, g, discr, {'bc': macro_bc}
+                    reg,
+                    local_gb,
+                    basis_functions,
+                    cc_assembler,
+                    cc_bc_values,
+                    g,
+                    discr,
+                    {"bc": macro_bc},
                 )
 
                 # @Eirik not sure the value here
@@ -182,7 +199,7 @@ class TestLocalProblems(unittest.TestCase):
                 local_gb.construct_local_buckets()
 
                 basis_functions, cc_assembler, _ = lp.cell_basis_functions(
-                    reg, local_gb, discr, {'bc': macro_bc}
+                    reg, local_gb, discr, {"bc": macro_bc}
                 )
 
                 # the assembler is the same for both
@@ -200,7 +217,6 @@ class TestLocalProblems(unittest.TestCase):
                 for e, _ in assembler.gb.edges():
                     dof = assembler.dof_ind(e, discr.mortar_variable)
                     self.assertTrue(np.allclose(basis_sum[dof], 0))
-
 
 
 if __name__ == "__main__":
