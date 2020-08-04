@@ -36,12 +36,29 @@ def split_network(network, selection_criterion, logical_op=np.logical_or, **kwar
         macro_network = pp.FractureNetwork2d(
             network.pts, macro_edges, network.domain, network.tol
         )
+        # save tags that can be used later on in the data assignment
+        macro_network.tags["is_macro"] = np.array([True]*macro_edges.shape[1])
+        macro_network.tags["is_micro"] = np.array([False]*macro_edges.shape[1])
+        for key, value in network.tags.items():
+            macro_network.tags[key] = value[macro]
 
         # construct the micro fracture network
         micro_edges = network.edges[:, micro]
         micro_network = pp.FractureNetwork2d(
             network.pts, micro_edges, network.domain, network.tol
         )
+        # save tags that can be used later on in the data assignment
+        micro_network.tags["is_micro"] = np.array([True]*micro_edges.shape[1])
+        micro_network.tags["is_macro"] = np.array([False]*micro_edges.shape[1])
+        for key, value in network.tags.items():
+            micro_network.tags[key] = value[micro]
+
+        # save the same information in the original network
+        network.tags["is_macro"] = np.array([False]*network.edges.shape[1])
+        network.tags["is_macro"][macro] = True
+
+        network.tags["is_micro"] = np.array([False]*network.edges.shape[1])
+        network.tags["is_micro"][micro] = True
 
     else:
         raise ValueError
