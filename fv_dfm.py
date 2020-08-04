@@ -29,7 +29,7 @@ class FVDFM(pp.FVElliptic):
         # method for the discretization (tpfa or mpfa so far)
         self.method = None
 
-    def set_parameters_cell_basis(self, gb, macro_data):
+    def set_parameters_cell_basis(self, gb, data):
         """
         Assign parameters for the micro gb. Very simple for now, this must be improved.
 
@@ -40,14 +40,11 @@ class FVDFM(pp.FVElliptic):
             None.
 
         """
-
-        macro_bc = macro_data["bc"]
-        # For now, we use constant matrix permeability for the micro domains. Not sure
-        # what is the best way to generalize this, probably, we can just skip it.
-        permeability = macro_data["permeability"]
-
         # First initialize data
         for g, d in gb:
+
+            d["Aavatsmark_transmissibilities"] = True
+
             domain_boundary = np.logical_and(
                 g.tags["domain_boundary_faces"],
                 np.logical_not(g.tags["fracture_faces"]),
@@ -59,18 +56,16 @@ class FVDFM(pp.FVElliptic):
             else:
                 bc_type = np.empty(0)
 
-            micro_bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
+            bc = pp.BoundaryCondition(g, boundary_faces, bc_type)
             if hasattr(g, "face_on_macro_bound"):
                 micro_ind = g.face_on_macro_bound
                 macro_ind = g.macro_face_ind
 
-                micro_bc.is_neu[micro_ind] = macro_bc.is_neu[macro_ind]
-                micro_bc.is_dir[micro_ind] = macro_bc.is_dir[macro_ind]
+                bc.is_neu[micro_ind] = data["bc_macro"]["bc"].is_neu[macro_ind]
+                bc.is_dir[micro_ind] = data["bc_macro"]["bc"].is_dir[macro_ind]
 
-            param = {"bc": micro_bc}
-
-            perm = pp.SecondOrderTensor(kxx=permeability * np.ones(g.num_cells))
-
+            param = {"bc": bc}
+            perm = data["g_data"](g)["second_order_tensor"]
             param["second_order_tensor"] = perm
 
             pp.initialize_default_data(g, d, self.keyword, param)
@@ -83,7 +78,7 @@ class FVDFM(pp.FVElliptic):
             param = {}
 
             if not hasattr(g1, "is_auxiliary") or not g1.is_auxiliary:
-                param["normal_diffusivity"] = 1e4
+                param["normal_diffusivity"] = 1e2
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -152,8 +147,7 @@ class FVDFM(pp.FVElliptic):
         matrix_dictionary = data[pp.DISCRETIZATION_MATRICES][self.keyword]
 
         micro_network = parameter_dictionary[self.network_keyword]
-
-        num_processes = data.get("num_processes", 1)
+        num_processes = parameter_dictionary.get("num_processes", 1)
         discr_ig = partial(
             self._discretize_interaction_region, g, micro_network, parameter_dictionary
         )
@@ -240,10 +234,8 @@ class FVDFM(pp.FVElliptic):
         """
         Add the fractures to the local interation region depending on the spatial dimension
         """
-        if isinstance(network, pp.FractureNetwork3d):
-            reg.add_fractures(fractures=network._fractures)
-        elif isinstance(network, pp.FractureNetwork2d):
-            reg.add_fractures(points=network.pts, edges=network.edges)
+        if isinstance(network, pp.FractureNetwork2d) or isinstance(network, pp.FractureNetwork3d):
+            reg.add_network(network)
         else:
             raise ValueError
 
