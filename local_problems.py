@@ -396,7 +396,7 @@ def discretize_pressure_trace_macro_bound(
             col += micro_g.macro_face_ind.size * [coarse_cell]
             # Use an area-weighted pressure reconstruction
             scaled_vals = (
-                p[micro_g.face_on_macro_bound]
+                micro_boundary_pressure[micro_g.face_on_macro_bound]
                 * micro_g.face_areas[micro_g.face_on_macro_bound]
                 / macro_g.face_areas[micro_g.macro_face_ind]
             )
