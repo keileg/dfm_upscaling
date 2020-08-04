@@ -591,6 +591,8 @@ def compute_transmissibilies(
                     grid_map = match_points_on_surface(
                         nc, loc_g.face_centers, coarse_grid.dim, gs.dim
                     )
+                else:
+                    grid_map = []
 
                 # If we found any matches, loop over all micro faces, sum the fluxes,
                 # possibly with an adjustment of the flux direction.
@@ -598,6 +600,7 @@ def compute_transmissibilies(
                     surface_flux = []
                     for fi in grid_map:
                         loc_flux = full_flux[fi[1]]
+
                         # If the micro and macro normal vectors point in different
                         # directions, we should switch the flux
                         fine_normal = loc_g.face_normals[:, fi[1]]
