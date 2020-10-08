@@ -45,11 +45,11 @@ class InteractionRegion:
         self.macro_face_of_boundary_surface = macro_face_of_boundary_surface
 
         self.network = None
-#        if self.dim == 2:
-#            self.fracture_pts = np.zeros((3, 0))
-#            self.fracture_edges = np.zeros((2, 0), dtype=np.int)
-#        else:
-#            self.fractures: List[pp.Fractures] = []
+        #        if self.dim == 2:
+        #            self.fracture_pts = np.zeros((3, 0))
+        #            self.fracture_edges = np.zeros((2, 0), dtype=np.int)
+        #        else:
+        #            self.fractures: List[pp.Fractures] = []
 
         if name == "mpfa":
             self.node_coord = g.nodes[:, reg_ind].reshape((-1, 1))
@@ -71,11 +71,10 @@ class InteractionRegion:
 
             # These are random values, use with care.
             mesh_args = {
-                "mesh_size_frac": extent / 5,
-                "mesh_size_bound": extent / 2,
-                "mesh_size_min": extent / 10,
+                "mesh_size_frac": extent / 1,
+                "mesh_size_bound": extent / 1,
+                "mesh_size_min": extent / 1,
             }
-
         if self.dim == 2:
             return self._mesh_2d(mesh_args)
         else:
@@ -150,7 +149,7 @@ class InteractionRegion:
         int_edges = np.hstack((self.network.edges, constraint_edges))
         int_tags = self.network.tags
         for key, value in int_tags.items():
-            int_tags[key] = np.hstack((value, [None]*constraint_edges.shape[1]))
+            int_tags[key] = np.hstack((value, [None] * constraint_edges.shape[1]))
 
         edge_2_constraint += self.network.edges.shape[1]
 
@@ -175,8 +174,10 @@ class InteractionRegion:
         file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
 
         gb = network.mesh(
-            mesh_args=mesh_args, file_name=file_name, constraints=edge_2_constraint,
-            preserve_fracture_tags=True
+            mesh_args=mesh_args,
+            file_name=file_name,
+            constraints=edge_2_constraint,
+            preserve_fracture_tags=True,
         )
 
         return gb, network, file_name
@@ -238,10 +239,7 @@ class InteractionRegion:
             pts = np.hstack((pts, p))
         return pts
 
-    def add_network(
-        self,
-        network
-    ) -> None:
+    def add_network(self, network) -> None:
 
         if self.dim == 3:
             # NEED TO BE FIXED
@@ -252,9 +250,11 @@ class InteractionRegion:
         else:
             self.network = network.copy()
             if self.network.pts.shape[0] == 2:
-                self.network.pts = np.vstack((self.network.pts, np.zeros(self.network.pts.shape[1])))
-            #self.fracture_pts = points
-            #self.fracture_edges = edges
+                self.network.pts = np.vstack(
+                    (self.network.pts, np.zeros(self.network.pts.shape[1]))
+                )
+            # self.fracture_pts = points
+            # self.fracture_edges = edges
 
     def coarse_cell_centers(self):
 

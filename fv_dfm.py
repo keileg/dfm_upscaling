@@ -8,9 +8,9 @@ import scipy.sparse as sps
 import multiprocessing as mp
 from functools import partial
 
-import interaction_region as ia_reg
-import local_problems
-from local_grid_bucket import LocalGridBucketSet
+from dfm_upscaling import interaction_region as ia_reg
+from dfm_upscaling import local_problems
+from dfm_upscaling.local_grid_bucket import LocalGridBucketSet
 
 
 class FVDFM(pp.FVElliptic):
@@ -234,7 +234,9 @@ class FVDFM(pp.FVElliptic):
         """
         Add the fractures to the local interation region depending on the spatial dimension
         """
-        if isinstance(network, pp.FractureNetwork2d) or isinstance(network, pp.FractureNetwork3d):
+        if isinstance(network, pp.FractureNetwork2d) or isinstance(
+            network, pp.FractureNetwork3d
+        ):
             reg.add_network(network)
         else:
             raise ValueError
