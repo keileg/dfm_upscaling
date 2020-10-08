@@ -244,7 +244,7 @@ class InteractionRegion:
         if self.dim == 3:
             # NEED TO BE FIXED
             fracs = []
-            for f in fractures:
+            for f in network._fractures:
                 fracs.append(f.copy())
             self.fractures = fracs
         else:
