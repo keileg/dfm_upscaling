@@ -891,10 +891,10 @@ class LocalGridBucketSet:
                 fc = g.face_centers
                 if reg.dim == 2:
                     dist, _ = pp.distances.points_segments(fc, pts[:, 0], pts[:, 1])
+                    on_bound = np.where(dist < self.tol)[0]
                 else:  # reg.dim == 3
-                    dist, *_ = pp.distances.points_polygon(fc, pts, tol=self.tol)
-
-                on_bound = np.where(dist < self.tol)[0]
+                    assert pts.shape[1] == 3
+                    on_bound = self._points_in_triangle(pts, fc)
 
                 if on_bound.size > 0:
                     # Append the micro faces to the list of found indices
@@ -933,6 +933,65 @@ class LocalGridBucketSet:
             boundary_points = np.vstack((boundary_points, np.zeros(boundary_ind.size)))
 
         return boundary_points, boundary_ind
+
+    def _points_in_triangle(self, tri_pts: np.ndarray, p: np.ndarray) -> np.ndarray:
+        # Check if points (in 3d) are inside a triangle (boundary surface
+        # of the interaciton region).
+        # The points can fall outside either because they are not in the plane of the
+        # triangle, or because they are outside the triangle (but in the plane)
+
+        # Shortcut if no points are passed.
+        if p.size == 0:
+            return np.array([], dtype=np.int)
+
+        if p.size < 4:
+            p = p.reshape((-1, 1))
+
+        # First check if the points are in the plane of the triangle
+        # Vectors between points in triangle
+        v1 = tri_pts[:, 1] - tri_pts[:, 0]
+        v2 = tri_pts[:, 2] - tri_pts[:, 0]
+        # Normal vector
+        n = np.array(
+            [
+                v1[1] * v2[2] - v1[2] * v2[1],
+                v1[2] * v2[0] - v1[0] * v2[2],
+                v1[0] * v2[1] - v1[1] * v2[0],
+            ]
+        )
+        # Vector from triangle to all candidate points
+        vfc = p - tri_pts[:, 0].reshape((-1, 1))
+        # Check
+        dot = np.abs(n.dot(vfc))
+        in_plane = dot < self.tol
+
+        # Next, check if the points are inside the triangle. We do not limit
+        # the test to points in the plane, this does not seem worth the effort.
+        # Credit: https://blackpawn.com/texts/pointinpoly/
+        v1_dot_v1 = v1.dot(v1)
+        v1_dot_v2 = v1.dot(v2)
+        v2_dot_v2 = v2.dot(v2)
+        v1_dot_vfc = v1.dot(vfc)
+        v2_dot_vfc = v2.dot(vfc)
+
+        det = v1_dot_v1 * v2_dot_v2 - v1_dot_v2 * v1_dot_v2
+
+        t1 = (v1_dot_vfc * v2_dot_v2 - v2_dot_vfc * v1_dot_v2) / det
+        t2 = (v1_dot_v1 * v2_dot_vfc - v1_dot_v2 * v1_dot_vfc) / det
+
+        # Check if points are inside triangle
+        # Need to safeguard the comparisons here due to rounding errors
+        inside = np.logical_and.reduce(
+            (
+                t1 >= -self.tol,
+                t2 >= -self.tol,
+                t1 <= 1 + self.tol,
+                t2 <= 1 + self.tol,
+                t1 + t2 <= 1 + self.tol,
+            )
+        )
+        # In triangle if both in the plane and inside
+        return np.where(np.logical_and(inside, in_plane))[0]
 
     def __repr__(self) -> str:
         s = (
