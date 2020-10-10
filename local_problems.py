@@ -416,9 +416,7 @@ def compute_transmissibilies(
     macro_data,
     sanity_check=True,
 ):
-    pts, cells, cell_info, phys_names = simplex._read_gmsh_file(
-        local_gb.file_name + ".msh"
-    )
+    pts, cells, cell_info, phys_names = local_gb.gmsh_data
 
     gmsh_constants = GmshConstants()
 

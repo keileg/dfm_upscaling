@@ -271,10 +271,13 @@ class LocalGridBucketSet:
             (edges, edge_tags, physical_line_counter, ia_reg_edge_numbering)
         )
 
-        self._recover_line_gb(network, file_name)
-        self._recover_surface_gb(network, file_name)
+        # Read mesh data and store it
+        self.gmsh_data = simplex._read_gmsh_file(file_name + ".msh")
 
-    def _recover_line_gb(self, network, file_name):
+        self._recover_line_gb(network)
+        self._recover_surface_gb(network)
+
+    def _recover_line_gb(self, network):
         """ We will use the following keys / items in network.decomposition:
 
             points: Coordinates of all point involved in the description of the network.
@@ -295,7 +298,7 @@ class LocalGridBucketSet:
         decomp = network.decomposition
         # Recover the full description of the gmsh mesh
 
-        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
+        pts, cells, cell_info, phys_names = self.gmsh_data
 
         gmsh_constants = GmshConstants()
         # Create all 1d grids that correspond to a domain boundary
@@ -546,13 +549,13 @@ class LocalGridBucketSet:
 
         self.line_gb = buckets_1d
 
-    def _recover_surface_gb(self, network, file_name):
+    def _recover_surface_gb(self, network):
 
         # Network decomposition
         decomp = network.decomposition
 
         # Recover the full description of the gmsh mesh
-        pts, cells, cell_info, phys_names = simplex._read_gmsh_file(file_name + ".msh")
+        pts, cells, cell_info, phys_names = self.gmsh_data
 
         # We need to recover four types of grids:
         #  1) 2d grids on the domain surfaces
