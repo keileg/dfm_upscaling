@@ -43,7 +43,7 @@ def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     # Find coinciding cell centers and face centers.
     cell_ind = []
 
-    for pair in match_points_on_surface(cc, fc, dim, g_prev.dim):
+    for pair in _match_points_on_surface(cc, fc, dim, g_prev.dim, g_prev.nodes):
         # Assign boundary condition
         bc_values[pair[1]] = v_prev[pair[0]]
         # Store the hit
@@ -52,7 +52,9 @@ def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     return cell_ind
 
 
-def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
+def _match_points_on_surface(
+    sp, p, spatial_dim, dim_of_sp, supporting_points, tol=1e-10
+):
     """
     Match points in two point sets by coordinates. One of the point sets is assumed to
     reside on a surface, or a line.
@@ -62,7 +64,9 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
         p (np.ndarray, 3 x n): Point set, to be compared with the surface points.
         spatial_dim (int): Spatial dimension of the point cloud. Should be 2 or 3.
         dim_of_sp (int): Dimension of the geometric object of sp.
-
+        supporting_points (np.ndarray, 3 x n): Additional points on the surface.
+            Will not look for duplicates of these, but they are used to define a normal
+            vector for the surface.
         tol (double, optional): Geometric tolerance in point comparison. Defaults to
             1e-10.
 
@@ -83,24 +87,29 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
 
     num_surf_pts = sp.shape[1]
 
+    if sp.shape[1] < spatial_dim:
+        all_surface_points = np.hstack((sp, supporting_points))
+    else:
+        # Sufficient number of points to construct the surface vector
+        all_surface_points = sp
+
     # Center point on the surface, and vector to all points in p
     cp = sp.mean(axis=1).reshape((-1, 1))
     vec_cp_p = p - cp
 
-    # If there are few points in p, or too few points in sp to define a normal direction
-    # we will simply compare all points.
-    if p.shape[1] < 2 or sp.shape[1] < spatial_dim:
+    if p.shape[1] < 2 or all_surface_points.shape[1] < spatial_dim:
+        # If there are few points in p we will simply compare all points.
         in_plane = np.arange(p.shape[1])
 
-    # If the surface is of co-dimension 2 (will be a line in 3d), we project the points
-    # to the line
     elif dim_of_sp < spatial_dim - 1:
+        # If the surface is of co-dimension 2 (will be a line in 3d), we project the points
+        # to the line
         # Point furthest away from the center point
-        ind = np.argmax(np.sum(np.abs(sp - cp), axis=0))
+        ind = np.argmax(np.sum(np.abs(all_surface_points - cp), axis=0))
 
         # Normalized vector along the line
         vec_on_line = (
-            sp[:spatial_dim, ind].reshape((-1, 1)) - cp[:spatial_dim]
+            all_surface_points[:spatial_dim, ind].reshape((-1, 1)) - cp[:spatial_dim]
         ).reshape((-1, 1))
         vec_on_line /= np.linalg.norm(vec_on_line)
 
@@ -121,18 +130,25 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
         # Points on the line - although we call it a plane to be consistent with below
         in_plane = np.where(np.sum(np.abs(cross), axis=0) < tol)[0]
 
-    # Here we will find the normal vector, and find points in the plane by a dot product
     else:
-        # Normal vector in 2d, the construction is somewhat elaborate
+        # Here we will find the normal vector, and find points in the plane by a dot product
         if spatial_dim == 2:
-            ind = np.argmax(np.sum(np.abs(sp - cp), axis=1))
+            # Normal vector in 2d, the construction is somewhat elaborate
+            ind = np.argmax(np.sum(np.abs(all_surface_points - cp), axis=1))
 
-            v = sp[:spatial_dim, ind].reshape((-1, 1)) - cp[:spatial_dim]
+            v = (
+                all_surface_points[:spatial_dim, ind].reshape((-1, 1))
+                - cp[:spatial_dim]
+            )
+            assert np.linalg.norm(v) > tol
             n = np.array([v[1], -v[0]])
 
-        # In 3d, we can use a pp function to get the normal vector
         else:
-            n = pp.map_geometry.compute_normal(sp).reshape((-1, 1))
+            # In 3d, we can use a pp function to get the normal vector
+            # We (should) know that the points are on a plane, so no check
+            n = pp.map_geometry.compute_normal(all_surface_points, check=False).reshape(
+                (-1, 1)
+            )
 
         # Index of points in the plane
         in_plane = np.where(np.abs(np.sum(vec_cp_p[:spatial_dim] * n, axis=0)) < tol)[0]
@@ -177,7 +193,6 @@ def match_points_on_surface(sp, p, spatial_dim, dim_of_sp, tol=1e-10):
 def cell_basis_functions(reg, local_gb, discr, macro_data):
     """
     Calculate basis function related to coarse cells for an interaction region
-
 
     """
 
@@ -326,7 +341,16 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
         # Done with all calculations for this basis function. Store it.
         basis_functions[coarse_ind] = x
 
+        #         if reg.reg_ind == 6:
+        #             if gb.dim_max() == 2:
+        #                 p = x[assembler.dof_ind(gb.grids_of_dimension(2)[0], 'pressure')]
+        #                 pp.plot_grid(gb.grids_of_dimension(2)[0], p)
+        #                 import matplotlib.pyplot
+        #                 matplotlib.pyplot.show()
+        # #                breakpoint()
+
         coarse_gb[coarse_ind] = gb
+
         coarse_assembler[coarse_ind] = assembler
         coarse_bc_values[coarse_ind] = {}
         for g, d in gb:
@@ -577,8 +601,8 @@ def compute_transmissibilies(
 
                 if loc_g.dim == gs.dim + 1:
                     # find faces in the matrix grid on the surface
-                    grid_map = match_points_on_surface(
-                        cc, loc_g.face_centers, coarse_grid.dim, gs.dim
+                    grid_map = _match_points_on_surface(
+                        cc, loc_g.face_centers, coarse_grid.dim, gs.dim, nc
                     )
                 elif loc_g.dim == gs.dim:
                     # find fractures that intersect with the surface
@@ -586,8 +610,8 @@ def compute_transmissibilies(
                     # hit in the second argument (p), chances are that a fracture is
                     # intersecting at the auxiliary surface
 
-                    grid_map = match_points_on_surface(
-                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim
+                    grid_map = _match_points_on_surface(
+                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim, cc
                     )
                 else:
                     grid_map = []
@@ -628,7 +652,7 @@ def compute_transmissibilies(
         trm_sum = np.bincount(coarse_face_ind, weights=trm)
         trm_scale = np.amax(np.bincount(coarse_face_ind, weights=0.5 * np.abs(trm)))
         trm_scale = trm_scale if trm_scale else 1
-        hit = np.abs(trm_sum) > 1e-10  # tpfa in 3d gave some problems, this fixed them
+        hit = np.abs(trm_sum) > 1e-6  # tpfa in 3d gave some problems, this fixed them
         assert np.allclose(trm_sum[hit] / trm_scale, 0)
 
     return coarse_cell_ind, coarse_face_ind, trm
