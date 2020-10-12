@@ -5,11 +5,11 @@ Created on Mon Mar  2 14:32:39 2020
 
 @author: eke001
 """
+import os
+from pathlib import Path
 import numpy as np
 import porepy as pp
 from typing import Union, Tuple, List, Optional
-
-import pdb
 
 
 class InteractionRegion:
@@ -53,6 +53,8 @@ class InteractionRegion:
 
         if name == "mpfa":
             self.node_coord = g.nodes[:, reg_ind].reshape((-1, 1))
+
+        self.file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
 
     ####################
     ## Functions related to meshing of fracture networks
@@ -171,16 +173,14 @@ class InteractionRegion:
         # in the FractureNetwork, to the ordering of surfaces in this region.
         self.domain_edges_2_reg_surface = sort_ind
 
-        file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
-
         gb = network.mesh(
             mesh_args=mesh_args,
-            file_name=file_name,
+            file_name=self.file_name,
             constraints=edge_2_constraint,
             preserve_fracture_tags=True,
         )
 
-        return gb, network, file_name
+        return gb, network
 
     def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
@@ -209,15 +209,13 @@ class InteractionRegion:
             assert ui.size == 1
             updated_constraint_inds.append(ui[0])
 
-        file_name = ".gmsh_upscaling_region_" + str(self.reg_ind)
-
         gb = network.mesh(
             mesh_args=mesh_args,
-            file_name=file_name,
+            file_name=self.file_name,
             constraints=updated_constraint_inds,
         )
 
-        return gb, network, file_name
+        return gb, network
 
     def coords(self, indices, node_type) -> np.ndarray:
         indices = np.atleast_1d(np.asarray(indices))
@@ -321,6 +319,16 @@ class InteractionRegion:
                 bf.append(surf[node_type.index("face")])
 
         return bf
+
+    def cleanup(self) -> None:
+        """ Delete files used for local mesh generation for this region.
+
+        """
+        msh = Path(self.file_name + '.msh')
+        geo = Path(self.file_name + '.geo')
+        for file in [msh, geo]:
+            if Path.exists(file):
+                Path.unlink(file)
 
     def __str__(self) -> str:
         s = f"Interaction region of type {self.name}\n"

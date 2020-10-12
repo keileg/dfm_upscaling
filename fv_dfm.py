@@ -282,6 +282,9 @@ class FVDFM(pp.FVElliptic):
         ) = local_problems.discretize_boundary_conditions(
             reg, gb_set, self, parameter_dictionary, g
         )
+        # For debugging purposes e have kept the mesh files for this region up to this point
+        # but now it should be okay to delete it
+        reg.cleanup()
 
         return (
             trm_cell,

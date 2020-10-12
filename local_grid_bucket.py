@@ -50,10 +50,9 @@ class LocalGridBucketSet:
 
         mesh_args = data.get("mesh_args", None)
 
-        gb, network, file_name = self.reg.mesh(mesh_args)
+        gb, network= self.reg.mesh(mesh_args)
         self.network = network
         self.gb = gb
-        self.file_name = file_name
 
         for g, _ in gb:
             if g.dim < self.dim:
@@ -104,13 +103,13 @@ class LocalGridBucketSet:
         network.decomposition["edges"] = network.decomposition["edges"][[0, 1, 2, 3, 3]]
 
         # Read mesh data and store it
-        self.gmsh_data = simplex._read_gmsh_file(file_name + ".msh")
+        self.gmsh_data = simplex._read_gmsh_file(self.reg.file_name + ".msh")
         self._recover_line_gb(network)
 
     def _construct_buckets_3d(self, data):
         mesh_args = data.get("mesh_args", None)
 
-        gb, network, file_name = self.reg.mesh(mesh_args)
+        gb, network = self.reg.mesh(mesh_args)
 
         for g, _ in gb:
             if g.dim < self.dim:
@@ -118,7 +117,6 @@ class LocalGridBucketSet:
 
         self.gb = gb
         self.network = network
-        self.file_name = file_name
 
         decomp = network.decomposition
 
@@ -274,7 +272,7 @@ class LocalGridBucketSet:
         )
 
         # Read mesh data and store it
-        self.gmsh_data = simplex._read_gmsh_file(file_name + ".msh")
+        self.gmsh_data = simplex._read_gmsh_file(self.reg.file_name + ".msh")
 
         self._recover_line_gb(network)
         self._recover_surface_gb(network)
