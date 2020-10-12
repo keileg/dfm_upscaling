@@ -151,6 +151,7 @@ def _match_points_on_surface(
             )
 
         # Index of points in the plane
+        assert np.all(np.isfinite(n))
         in_plane = np.where(np.abs(np.sum(vec_cp_p[:spatial_dim] * n, axis=0)) < tol)[0]
 
     # Restrict point cloud to the plane
