@@ -255,8 +255,9 @@ class FVDFM(pp.FVElliptic):
         # First basis functions for local problems
         (
             basis_functions,
-            cc_assembler,
+            cc_assembler,  # Assembler for local Nd problem, one per coarse cell center
             cc_bc_values,
+            full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
         ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
 
         # Call method to transfer basis functions to transmissibilties over coarse
@@ -280,7 +281,7 @@ class FVDFM(pp.FVElliptic):
             trm_boundary,
             matrix_bound_pressure_face,
         ) = local_problems.discretize_boundary_conditions(
-            reg, gb_set, self, parameter_dictionary, g
+            reg, gb_set, self, parameter_dictionary, g, full_assembler_map
         )
         # For debugging purposes e have kept the mesh files for this region up to this point
         # but now it should be okay to delete it

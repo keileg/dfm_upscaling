@@ -382,7 +382,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             dof = assembler.dof_ind(e, discr.mortar_variable)
             assert np.allclose(basis_sum[dof], 0)
 
-    return basis_functions, coarse_assembler, coarse_bc_values
+    return basis_functions, coarse_assembler, coarse_bc_values, assembler_map
 
 
 def discretize_pressure_trace_macro_bound(
@@ -658,7 +658,7 @@ def compute_transmissibilies(
     return coarse_cell_ind, coarse_face_ind, trm
 
 
-def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
+def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g, assembler_map):
     """
     Discretization of boundary conditions, consistent with the construction of basis
     functions for internal cells.
@@ -687,32 +687,13 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
         # Nothing to do here
         return ([], [], []), ([], [], [])
 
-    # Data structure to store Assembler of each grid bucket
-    assembler_map = {}
+
+    # IMPLEMENTATION NOTE: We can reuse the discretization from the basis function
+    # computation, thereby saving quite some time.
 
     # Get a list of the local grid bucktes. This will be first 1d, then 2d (if dim == 3)
     # and then the real local gb
     bucket_list = local_gb.bucket_list()
-
-    # Loop over all grid buckets: first type of gb (line, surface, 3d)
-    for gb_set in bucket_list:
-        # Then all gbs of this type
-        for gb in gb_set:
-            # Set parameters and discretization.
-            # The gb may contain parameters, variable and discretization specifications
-            # from a previous construction of basis functions. This will be overwritten
-            # by the lines below (see implementation of the methods in discr)
-            discr.set_parameters_cell_basis(gb, macro_data)
-            discr.set_variables_discretizations_cell_basis(gb)
-
-            # Create an Assembler and discretize the specified problem. The parameters
-            # and type (not value) of boundary condition will be the same throughout the
-            # calculations, thus discretization can be done once.
-            assembler = pp.Assembler(gb)
-            assembler.discretize()
-
-            # Associate the assembler with this gb
-            assembler_map[gb] = assembler
 
     # The macro face may be split into several region faces (mpfa in 3d).
     # Get hold of these, and get a mapping from the region faces to the macro faces
