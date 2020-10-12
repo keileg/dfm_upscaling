@@ -103,7 +103,9 @@ class LocalGridBucketSet:
         # set up).
         network.decomposition["edges"] = network.decomposition["edges"][[0, 1, 2, 3, 3]]
 
-        self._recover_line_gb(network, file_name)
+        # Read mesh data and store it
+        self.gmsh_data = simplex._read_gmsh_file(file_name + ".msh")
+        self._recover_line_gb(network)
 
     def _construct_buckets_3d(self, data):
         mesh_args = data.get("mesh_args", None)
