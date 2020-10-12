@@ -134,7 +134,7 @@ def _match_points_on_surface(
         # Here we will find the normal vector, and find points in the plane by a dot product
         if spatial_dim == 2:
             # Normal vector in 2d, the construction is somewhat elaborate
-            ind = np.argmax(np.sum(np.abs(all_surface_points - cp), axis=1))
+            ind = np.argmax(np.sum(np.abs(all_surface_points - cp), axis=0))
 
             v = (
                 all_surface_points[:spatial_dim, ind].reshape((-1, 1))
@@ -662,7 +662,7 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g):
     """
     Discretization of boundary conditions, consistent with the construction of basis
     functions for internal cells.
-    
+
     The implementation is in part very similar to that for the basis function
     computation, and should be refactored at some point.
 
