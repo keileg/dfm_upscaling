@@ -324,8 +324,8 @@ class InteractionRegion:
         """ Delete files used for local mesh generation for this region.
 
         """
-        msh = Path(self.file_name + '.msh')
-        geo = Path(self.file_name + '.geo')
+        msh = Path(self.file_name + ".msh")
+        geo = Path(self.file_name + ".geo")
         for file in [msh, geo]:
             if Path.exists(file):
                 Path.unlink(file)
