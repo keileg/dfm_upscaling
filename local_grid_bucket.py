@@ -50,7 +50,7 @@ class LocalGridBucketSet:
 
         mesh_args = data.get("mesh_args", None)
 
-        gb, network= self.reg.mesh(mesh_args)
+        gb, network = self.reg.mesh(mesh_args)
         self.network = network
         self.gb = gb
 

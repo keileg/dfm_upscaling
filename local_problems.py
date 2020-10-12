@@ -223,8 +223,10 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             assembler = pp.Assembler(gb)
             assembler.discretize()
 
+            A, _ = assembler.assemble_matrix_rhs(only_matrix=True)
+
             # Associate the assembler with this gb
-            assembler_map[gb] = assembler
+            assembler_map[gb] = (assembler, A)
 
     # Then the basis function calculation.
     # The structure of the calculations is: Loop over grid buckets with increasing
@@ -307,13 +309,13 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                         trivial_solution = False
 
                 # Get assembler
-                assembler = assembler_map[gb]
+                assembler, A = assembler_map[gb]
                 if trivial_solution:
                     # The solution is known to be zeros
                     x = np.zeros(assembler.num_dof())
                 else:
                     # This will use the updated values for the boundary conditions
-                    A, b = assembler.assemble_matrix_rhs()
+                    _, b = assembler.assemble_matrix_rhs(only_rhs=True)
                     # Solve and distribute
                     x = sps.linalg.spsolve(A, b)
 
@@ -658,7 +660,9 @@ def compute_transmissibilies(
     return coarse_cell_ind, coarse_face_ind, trm
 
 
-def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g, assembler_map):
+def discretize_boundary_conditions(
+    reg, local_gb, discr, macro_data, coarse_g, assembler_map
+):
     """
     Discretization of boundary conditions, consistent with the construction of basis
     functions for internal cells.
@@ -686,7 +690,6 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g, a
     if reg_bound_surface.size == 0:
         # Nothing to do here
         return ([], [], []), ([], [], [])
-
 
     # IMPLEMENTATION NOTE: We can reuse the discretization from the basis function
     # computation, thereby saving quite some time.
@@ -824,13 +827,13 @@ def discretize_boundary_conditions(reg, local_gb, discr, macro_data, coarse_g, a
                             bc_values[micro_bound_face] = g.face_areas[micro_bound_face]
 
                 # Get assembler
-                assembler = assembler_map[gb]
+                assembler, A = assembler_map[gb]
                 if trivial_solution:
                     # The solution is known to be zeros
                     x = np.zeros(assembler.num_dof())
                 else:
                     # This will use the updated values for the boundary conditions
-                    A, b = assembler.assemble_matrix_rhs()
+                    _, b = assembler.assemble_matrix_rhs(only_rhs=True)
                     # Solve and distribute
                     x = sps.linalg.spsolve(A, b)
 
