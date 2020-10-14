@@ -105,6 +105,9 @@ class FVDFM(pp.FVElliptic):
         # Use mpfa for the fine-scale problem for now. We may generalize this at some
         # point, but that should be a technical detail.
         fine_scale_dicsr = pp.Mpfa(self.keyword)
+        # In 1d, mpfa will end up calling tpfa, so use this directly, in a hope that
+        # the reduced amount of boilerplate will save some time.
+        fine_scale_dicsr_1d = pp.Tpfa(self.keyword)
 
         void_discr = pp.EllipticDiscretizationZeroPermeability(self.keyword)
 
@@ -116,12 +119,20 @@ class FVDFM(pp.FVElliptic):
                 }
             #                print(g.cell_centers)
             else:
-                d[pp.DISCRETIZATION] = {
-                    self.cell_variable: {self.cell_discr: fine_scale_dicsr}
-                }
+                if g.dim > 1:
+                    d[pp.DISCRETIZATION] = {
+                        self.cell_variable: {self.cell_discr: fine_scale_dicsr}
+                    }
+                else:
+                    d[pp.DISCRETIZATION] = {
+                        self.cell_variable: {self.cell_discr: fine_scale_dicsr_1d}
+                    }
+
             d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
 
         # Loop over the edges in the GridBucket, define primary variables and discretizations
+        # NOTE: No need to differ between Mpfa and Tpfa here; their treatment of interface
+        # discretizations are the same.
         for e, d in gb.edges():
             g1, g2 = gb.nodes_of_edge(e)
             d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
