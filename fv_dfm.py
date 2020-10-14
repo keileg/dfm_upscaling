@@ -68,6 +68,11 @@ class FVDFM(pp.FVElliptic):
             perm = data["g_data"](g)["second_order_tensor"]
             param["second_order_tensor"] = perm
 
+            # Use python inverter for mpfa for small problems, where it does not pay off
+            # to fire up numba. The set threshold value is somewhat randomly picked.
+            if g.num_cells < 100:
+                param["mpfa_inverter"] = "python"
+
             pp.initialize_default_data(g, d, self.keyword, param)
 
         for e, d in gb.edges():
