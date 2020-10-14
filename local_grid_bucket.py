@@ -635,11 +635,15 @@ class LocalGridBucketSet:
             g_tmp = []
             for g in g_1d_auxiliary:
                 g_pts = g.nodes
-                # Distance from the grid nodes to the surface. If at least one point is
+                # Find points on the (triangular) surface. If at least one point is
                 # not on the surface, the grid will be kept.
-                dist, *_ = pp.distances.points_polygon(g_pts, s_pts)
-                if dist.max() > self.tol:
+                assert (
+                    s_pts.shape[1] == 3
+                )  # If this breaks, use distances.point_polygon
+                on_surf = self._points_in_triangle(s_pts, g_pts)
+                if on_surf.size < g_pts.shape[1]:
                     g_tmp.append(g)
+
             # Update list of 1d grids
             g_1d_auxiliary = g_tmp
 
