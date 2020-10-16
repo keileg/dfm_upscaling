@@ -139,13 +139,27 @@ class FVDFM(pp.FVElliptic):
             # The type of lower-dimensional discretization depends on whether this is a
             # (part of a) fracture, or a transition between two line or surface grids.
             if hasattr(g1, "is_auxiliary") and g1.is_auxiliary:
-                mortar_discr = pp.FluxPressureContinuity(
-                    self.keyword, fine_scale_dicsr, void_discr
-                )
+                if g2.dim > 1:
+                    mortar_discr = pp.FluxPressureContinuity(
+                        self.keyword, fine_scale_dicsr, void_discr
+                    )
+                else:
+                    mortar_discr = pp.FluxPressureContinuity(
+                        self.keyword, fine_scale_dicsr_1d, void_discr
+                    )
             else:
-                mortar_discr = pp.RobinCoupling(
-                    self.keyword, fine_scale_dicsr, fine_scale_dicsr
-                )
+                if g1.dim > 1:
+                    mortar_discr = pp.RobinCoupling(
+                        self.keyword, fine_scale_dicsr, fine_scale_dicsr
+                    )
+                elif g1.dim == 1:
+                    mortar_discr = pp.RobinCoupling(
+                        self.keyword, fine_scale_dicsr, fine_scale_dicsr_1d
+                    )
+                else:
+                    mortar_discr = pp.RobinCoupling(
+                        self.keyword, fine_scale_dicsr_1d, fine_scale_dicsr_1d
+                    )
 
             d[pp.COUPLING_DISCRETIZATION] = {
                 self.mortar_discr: {
