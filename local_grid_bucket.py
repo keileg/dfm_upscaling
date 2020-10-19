@@ -655,13 +655,23 @@ class LocalGridBucketSet:
         # Create grids for physical points on the boundary surfaces. This may be both
         # on domain edges, in the meeting of surface and fracture polygons, and by the
         # meeting of fracture surfaces within a boundary surface.
-        g_0d = mesh_2_grid.create_0d_grids(
+        g_0d_boundary = mesh_2_grid.create_0d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
             target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
         )
+
+        # 0d grids for points where a fracture is cut by an auxiliary surface.
+        g_0d_constraint = mesh_2_grid.create_0d_grids(
+            pts,
+            cells,
+            phys_names,
+            cell_info,
+            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_POINT,
+        )
+        g_0d = g_0d_boundary + g_0d_constraint
 
         # Assign the 1d and 0d grids an attribute g.from_fracture, depending on
         # wether they coincide with a fracture or are auxiliary.
@@ -681,9 +691,12 @@ class LocalGridBucketSet:
 
         # Map from the fracture boundary points, in the network decomposition index, to
         # the corresponding 0d grids
-        g_0d_map = {}
-        for g in g_0d:
-            g_0d_map[fracture_boundary_points[g.physical_name_index]] = g
+        g_0d_boundary_map, g_0d_constraint_map = {}, {}
+        for g in g_0d_boundary:
+            g_0d_boundary_map[fracture_boundary_points[g.physical_name_index]] = g
+
+        for g in g_0d_constraint:
+            g_0d_constraint_map[g.global_point_ind[0]] = g
 
         # We now have all the grids needed. The next step is to group them into surfaces
         # that are divided by the interaction region edges. Specifically, 2d surface
@@ -742,11 +755,11 @@ class LocalGridBucketSet:
             # Make a list of edges of this subgraph
             clusters.append(list(sg.nodes))
 
-        # Create mappings from the surface grids to its embedded 1d and 0d grids
+        # Create mappings from the surface grids to their embedded 1d and 0d grids
         g_2d_2_frac_g_map = {}
         g_2d_2_0d_g_map = {}
 
-        # Loop over the surface grids, find its embedded lower-dimensional grids
+        # Loop over the surface grids, find their embedded lower-dimensional grids
         for si in np.where(network.tags["boundary"])[0]:
             if self.reg.surface_is_boundary[si - index_offset]:
                 continue
@@ -775,7 +788,12 @@ class LocalGridBucketSet:
             # once
             intersection_nodes = np.where(np.bincount(loc_network_nodes) > 1)[0]
             # Register information
-            g_2d_2_0d_g_map[g_surf] = [g_0d_map[i] for i in intersection_nodes]
+            loc_0d_grids = [g_0d_boundary_map[i] for i in intersection_nodes]
+            for ni in loc_network_nodes:
+                if ni in g_0d_constraint_map:
+                    loc_0d_grids.append(g_0d_constraint_map[ni])
+
+            g_2d_2_0d_g_map[g_surf] = loc_0d_grids
 
         # Finally, we can collect the surface grid buckets. There will be one for each
         # cluster, identified above.
@@ -787,6 +805,8 @@ class LocalGridBucketSet:
 
             g2, g1, g0 = [], [], []
 
+            added_0d_ind = []
+
             # Loop over cluster members
             for grid_ind in c:
                 # This is either a surface grid, in which case we need to register the
@@ -795,19 +815,42 @@ class LocalGridBucketSet:
                     g_surf = g_2d[grid_ind]
                     g2 += [g_surf]
                     g1 += list(g_2d_2_frac_g_map[g_surf])
-                    g0 += list(g_2d_2_0d_g_map[g_surf])
-                # .. or a 1d auxiliary grid
+                    g0_this = list(g_2d_2_0d_g_map[g_surf])
+
+                    for g in g0_this:
+                        # 0d grids may reside on the boundary between 2d surfaces
+                        # (think an auxiliray line between two surfaces, which is intersected
+                        # by a fracture line). These point grids should only be added once to
+                        # the list of grids
+                        if g.global_point_ind[0] not in added_0d_ind:
+                            g0 += [g]
+                            added_0d_ind.append(g.global_point_ind[0])
+
                 else:
                     # Here we need to adjust the grid index, to account for the
                     # numbering used in defining the pairs above
                     g1 += [g_1d_auxiliary[grid_ind - num_2d_grids]]
 
-            # Make list, make bucket, store it.
+            # Make list, make bucket.
             grid_list = [g2, g1, g0]
             gb_loc = pp.meshing.grid_list_to_grid_bucket(grid_list)
+
+            # The local grid bucket may contain edges between 1d auxiliary lines
+            # and 0d grids caused by the intersection of a fracture and auxiliary line.
+            # Remove these.
+            edges_to_remove = []
+            for e, _ in gb_loc.edges():
+                g_h, _ = e
+                if g_h.dim == 1 and g_h.is_auxiliary:
+                    edges_to_remove.append(e)
+
+            for e in edges_to_remove:
+                gb_loc._edges.pop(e)
+
+            # Store the bucket
             surface_buckets.append(gb_loc)
 
-        # Done!
+        # Tag faces that are on the boundary of the macro domain
         for gb in surface_buckets:
             self._tag_faces_macro_boundary(gb)
 
