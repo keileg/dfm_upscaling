@@ -669,7 +669,7 @@ class LocalGridBucketSet:
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_POINT,
+            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_CONSTRAINT_INTERSECTION_POINT,
         )
         g_0d = g_0d_boundary + g_0d_constraint
 
@@ -842,6 +842,7 @@ class LocalGridBucketSet:
             for e, _ in gb_loc.edges():
                 g_h, _ = e
                 if g_h.dim == 1 and g_h.is_auxiliary:
+                    #                    breakpoint()
                     edges_to_remove.append(e)
 
             for e in edges_to_remove:
