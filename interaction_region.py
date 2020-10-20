@@ -177,7 +177,7 @@ class InteractionRegion:
             mesh_args=mesh_args,
             file_name=self.file_name,
             constraints=edge_2_constraint,
-            preserve_fracture_tags=True,
+            #            preserve_fracture_tags=True,
         )
 
         return gb, network
