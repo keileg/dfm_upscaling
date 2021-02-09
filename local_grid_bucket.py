@@ -13,8 +13,8 @@ import networkx as nx
 from typing import Dict
 
 from porepy.utils.setmembership import unique_columns_tol
-from porepy.grids.gmsh import mesh_2_grid
-from porepy.grids.constants import GmshConstants
+from porepy.fracs import msh_2_grid
+from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
 
 from dfm_upscaling import interaction_region as ia_reg
@@ -58,28 +58,26 @@ class LocalGridBucketSet:
             if g.dim < self.dim:
                 g.from_fracture = True
 
-        gmsh_constants = GmshConstants()
-
         # We need to define point tags, which are assumed to exist by
         # self._recover_line_gb()
-        edges = network.decomposition["edges"]
+        edges = network._decomposition["edges"]
 
         # Each point should be classified as either boundary, fracture or fracture and
         # boundary, according to which edges share the point
 
         # Initialize by a neutral tag
-        point_tags = gmsh_constants.NEUTRAL_TAG * np.ones(
-            network.decomposition["points"].shape[1], dtype=np.int
+        point_tags = Tags.NEUTRAL.value * np.ones(
+            network._decomposition["points"].shape[1], dtype=np.int
         )
 
         # Find the points of boundary and fracture edges
         boundary_points = np.union1d(
-            edges[0, edges[2] == gmsh_constants.DOMAIN_BOUNDARY_TAG],
-            edges[1, edges[2] == gmsh_constants.DOMAIN_BOUNDARY_TAG],
+            edges[0, edges[2] == Tags.DOMAIN_BOUNDARY_LINE.value],
+            edges[1, edges[2] == Tags.DOMAIN_BOUNDARY_LINE.value],
         )
         fracture_points = np.union1d(
-            edges[0, edges[2] == gmsh_constants.FRACTURE_TAG],
-            edges[1, edges[2] == gmsh_constants.FRACTURE_TAG],
+            edges[0, edges[2] == Tags.FRACTURE.value],
+            edges[1, edges[2] == Tags.FRACTURE.value],
         )
 
         # Split into fracture, boundary or both
@@ -88,19 +86,19 @@ class LocalGridBucketSet:
         only_boundary_points = np.setdiff1d(boundary_points, fracture_points)
 
         # Tag accordingly
-        point_tags[
-            fracture_boundary_points
-        ] = gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
-        point_tags[only_fracture_points] = gmsh_constants.FRACTURE_TAG
-        point_tags[only_boundary_points] = gmsh_constants.DOMAIN_BOUNDARY_TAG
+        point_tags[fracture_boundary_points] = Tags.FRACTURE_BOUNDARY_LINE.value
+        point_tags[only_fracture_points] = Tags.FRACTURE.value
+        point_tags[only_boundary_points] = Tags.DOMAIN_BOUNDARY_POINT.value
 
         # Store information
-        network.decomposition["point_tags"] = point_tags
+        network._decomposition["point_tags"] = point_tags
 
         # for 2d problems, the physical (gmsh) tags can also be used to identify
         # individual interaction regions (this follows form how the gmsh .geo file is
         # set up).
-        network.decomposition["edges"] = network.decomposition["edges"][[0, 1, 2, 3, 3]]
+        network._decomposition["edges"] = network._decomposition["edges"][
+            [0, 1, 2, 3, 3]
+        ]
 
         # Read mesh data and store it
         self.gmsh_data = simplex._read_gmsh_file(self.reg.file_name + ".msh")
@@ -118,13 +116,13 @@ class LocalGridBucketSet:
         self.gb = gb
         self.network = network
 
-        decomp = network.decomposition
+        decomp = network._decomposition
 
         edges = decomp["edges"]
         edge_tags = decomp["edge_tags"]
 
         def edge_indices(subset, edges):
-            """ Helper function to find a subset of edges in the full edge set
+            """Helper function to find a subset of edges in the full edge set
 
             Parameters:
                 subset (np.array, 2 x n): Edges, defined by their point indices
@@ -267,7 +265,7 @@ class LocalGridBucketSet:
         # Sanity check
         assert np.all(ia_reg_edge_numbering[edge_tags == 1]) >= 0
 
-        network.decomposition["edges"] = np.vstack(
+        network._decomposition["edges"] = np.vstack(
             (edges, edge_tags, physical_line_counter, ia_reg_edge_numbering)
         )
 
@@ -278,36 +276,35 @@ class LocalGridBucketSet:
         self._recover_surface_gb(network)
 
     def _recover_line_gb(self, network):
-        """ We will use the following keys / items in network.decomposition:
+        """We will use the following keys / items in network._decomposition:
 
-            points: Coordinates of all point involved in the description of the network.
-            edges: Connection between lines.
-                First two rows are connections between decomp.points
-                Third row is the type of edge this is, referring to GmshConstant tags.
-                Fourth row is the number part of the physical name that gmsh has
-                    assigned to this grid.
-                Fifth row gives a line index, so that segments that are (or were prior
-                     to splitting) part of the same line have the same index
-            domain_boundary_points: Index, referring to decomp., of points that are
-                part of the domain boundary definition.
-            fracture_boundary_points: Index, referring to decomp., of points that are
-                part of a fracture, and on the domain boundary. Will be formed by the
-                intersection of a fracture and a line that has tag DOMAIN_BOUNDARY_TAG
+        points: Coordinates of all point involved in the description of the network.
+        edges: Connection between lines.
+            First two rows are connections between decomp.points
+            Third row is the type of edge this is, referring to GmshConstant tags.
+            Fourth row is the number part of the physical name that gmsh has
+                assigned to this grid.
+            Fifth row gives a line index, so that segments that are (or were prior
+                 to splitting) part of the same line have the same index
+        domain_boundary_points: Index, referring to decomp., of points that are
+            part of the domain boundary definition.
+        fracture_boundary_points: Index, referring to decomp., of points that are
+            part of a fracture, and on the domain boundary. Will be formed by the
+            intersection of a fracture and a line that has tag DOMAIN_BOUNDARY_TAG
 
         """
-        decomp = network.decomposition
+        decomp = network._decomposition
         # Recover the full description of the gmsh mesh
 
         pts, cells, cell_info, phys_names = self.gmsh_data
 
-        gmsh_constants = GmshConstants()
         # Create all 1d grids that correspond to a domain boundary
-        g_1d = mesh_2_grid.create_1d_grids(
+        g_1d = msh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+            line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE.value,
             return_fracture_tips=False,
         )
 
@@ -316,32 +313,33 @@ class LocalGridBucketSet:
         # faces. Only some of the grids are included in the local grid buckets -
         # specifically the cell centers grids may not be needed - but it is easier to
         # create all, and then dump those not needed.
-        g_0d_domain_boundary = mesh_2_grid.create_0d_grids(
+        g_0d_domain_boundary = msh_2_grid.create_0d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=gmsh_constants.PHYSICAL_NAME_BOUNDARY_POINT,
+            target_tag_stem=PhysicalNames.DOMAIN_BOUNDARY_POINT.value,
         )
         # Create a mapping from the domain boundary points to the 0d grids
         # The keys are the indexes in the decomposition of the network.
         domain_point_2_g = {}
         for g in g_0d_domain_boundary:
             domain_point_2_g[
-                decomp["domain_boundary_points"][g._physical_name_index]
+                #                decomp["domain_boundary_points"][g._physical_name_index]
+                g._physical_name_index
             ] = g
 
         # Similarly, construct 0d grids for the intersection between a fracture and the
         # edge of a domain
-        g_0d_frac_bound = mesh_2_grid.create_0d_grids(
+        g_0d_frac_bound = msh_2_grid.create_0d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
+            target_tag_stem=PhysicalNames.FRACTURE_BOUNDARY_POINT.value,
         )
         fracture_boundary_points = np.where(
-            decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
+            decomp["point_tags"] == Tags.FRACTURE_BOUNDARY_LINE.value
         )[0]
 
         # Assign the 0d grids an attribute g.from_fracture, depending on whether it
@@ -365,7 +363,7 @@ class LocalGridBucketSet:
         # The keys are the indexes in the decomposition of the network.
         frac_bound_point_2_g = {}
         for g in g_0d_frac_bound:
-            frac_bound_point_2_g[fracture_boundary_points[g._physical_name_index]] = g
+            frac_bound_point_2_g[g._physical_name_index] = g
 
         # Get the points that form the boundary of the interaction region
         boundary_point_coord, boundary_point_ind = self._network_boundary_points(
@@ -373,7 +371,7 @@ class LocalGridBucketSet:
         )
 
         # Find all edges that are marked as a domain_boundary
-        bound_edge = decomp["edges"][2] == gmsh_constants.DOMAIN_BOUNDARY_TAG
+        bound_edge = decomp["edges"][2] == Tags.DOMAIN_BOUNDARY_LINE.value
         # Find the index of edges that are associated with the domain boundary. Each
         # part of the boundary may consist of a single line, or several edges that are
         # split either by fractures, or by other auxiliary points.
@@ -444,6 +442,7 @@ class LocalGridBucketSet:
                 edge_grids_0d = [
                     domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]
                 ]
+            #                breakpoint()
 
             # Data structure for storing point grids along the edge that corresponds to
             # fracture grids
@@ -513,7 +512,7 @@ class LocalGridBucketSet:
                             # Add the grid if it is not added before - this is necessary
                             # because of minor differences in edge tagging between 2d
                             # and 3d domains
-                            if not g_loc in edge_grids_1d:
+                            if g_loc not in edge_grids_1d:
                                 edge_grids_1d.append(g_loc)
 
                         # Add all 0d grids to the set of 0d grids along the region edge
@@ -537,6 +536,8 @@ class LocalGridBucketSet:
             # Create a grid list
             # TODO: We probably need to differ between the two types of 0d grids
             grid_list = [edge_grids_1d, edge_grids_0d + fracture_point_grids_0d]
+            #            if self.reg.reg_ind == 2:
+            #                breakpoint()
             # Create a grid bucket for this edge
             gb_edge = pp.meshing.grid_list_to_grid_bucket(grid_list)
 
@@ -552,7 +553,7 @@ class LocalGridBucketSet:
     def _recover_surface_gb(self, network):
 
         # Network decomposition
-        decomp = network.decomposition
+        decomp = network._decomposition
 
         # Recover the full description of the gmsh mesh
         pts, cells, cell_info, phys_names = self.gmsh_data
@@ -563,16 +564,14 @@ class LocalGridBucketSet:
         #  3) 1d grids formed at the junction between 2d domain surface grids
         #  4) 0d grids formed at the intersection between 1d fracture line grids
 
-        gmsh_constants = GmshConstants()
-
         # Create all 2d grids that correspond to a domain boundary
-        g_2d_all = mesh_2_grid.create_2d_grids(
+        g_2d_all = msh_2_grid.create_2d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
+            surface_tag=PhysicalNames.DOMAIN_BOUNDARY_SURFACE,
         )
 
         index_offset = min([g.frac_num for g in g_2d_all])
@@ -592,12 +591,12 @@ class LocalGridBucketSet:
 
         # 1d grids formed on the intersection of fracture surfaces with the domain
         # boundary
-        g_1d = mesh_2_grid.create_1d_grids(
+        g_1d = msh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            line_tag=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_LINE,
+            line_tag=PhysicalNames.FRACTURE_BOUNDARY_LINE,
             return_fracture_tips=False,
         )
 
@@ -614,12 +613,12 @@ class LocalGridBucketSet:
 
         # Find 1d grids along domain boundaries that are not interaction region edges.
         # The latter is excluded by the constraints keyword.
-        g_1d_auxiliary = mesh_2_grid.create_1d_grids(
+        g_1d_auxiliary = msh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+            line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE,
             constraints=ia_edge,
             return_fracture_tips=False,
         )
@@ -649,27 +648,27 @@ class LocalGridBucketSet:
 
         # Points that are tagged as both on a fracture and on the domain boundary
         fracture_boundary_points = np.where(
-            decomp["point_tags"] == gmsh_constants.FRACTURE_LINE_ON_DOMAIN_BOUNDARY_TAG
+            decomp["point_tags"] == Tags.FRACTURE_BOUNDARY_POINT.value
         )[0]
 
         # Create grids for physical points on the boundary surfaces. This may be both
         # on domain edges, in the meeting of surface and fracture polygons, and by the
         # meeting of fracture surfaces within a boundary surface.
-        g_0d_boundary = mesh_2_grid.create_0d_grids(
+        g_0d_boundary = msh_2_grid.create_0d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_BOUNDARY_POINT,
+            target_tag_stem=PhysicalNames.FRACTURE_BOUNDARY_POINT,
         )
 
         # 0d grids for points where a fracture is cut by an auxiliary surface.
-        g_0d_constraint = mesh_2_grid.create_0d_grids(
+        g_0d_constraint = msh_2_grid.create_0d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=gmsh_constants.PHYSICAL_NAME_FRACTURE_CONSTRAINT_INTERSECTION_POINT,
+            target_tag_stem=PhysicalNames.FRACTURE_CONSTRAINT_INTERSECTION_POINT,
         )
         g_0d = g_0d_boundary + g_0d_constraint
 
@@ -858,7 +857,7 @@ class LocalGridBucketSet:
         self.surface_gb = surface_buckets
 
     def _match_points(self, p1, p2):
-        """ Find occurences of coordinates in the second array within the first array.
+        """Find occurences of coordinates in the second array within the first array.
 
         Args:
             p1 (np.array): Set of coordinates.
@@ -977,8 +976,8 @@ class LocalGridBucketSet:
                 g.face_on_macro_bound = micro_ind
 
     def _network_boundary_points(self, network):
-        boundary_ind = network.decomposition["domain_boundary_points"]
-        boundary_points = network.decomposition["points"][:, boundary_ind]
+        boundary_ind = network._decomposition["domain_boundary_points"]
+        boundary_points = network._decomposition["points"][:, boundary_ind]
 
         if boundary_points.shape[0] == 2:
             boundary_points = np.vstack((boundary_points, np.zeros(boundary_ind.size)))

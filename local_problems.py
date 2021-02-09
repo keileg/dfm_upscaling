@@ -13,8 +13,8 @@ from typing import List, Tuple
 
 
 import scipy.sparse as sps
-from porepy.grids.constants import GmshConstants
-from porepy.grids.gmsh import mesh_2_grid
+from porepy.fracs import msh_2_grid
+from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
 
 
@@ -337,6 +337,9 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                         # conditions for the problem with one dimension more
                         new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
 
+            #            if reg.reg_ind == 1:
+            #                breakpoint()
+
             # We are done with all buckets of this dimension. Redefine the current
             # values to previous values, and move on to the next set of buckets.
             prev_values = new_prev_val
@@ -445,8 +448,6 @@ def compute_transmissibilies(
 ):
     pts, cells, cell_info, phys_names = local_gb.gmsh_data
 
-    gmsh_constants = GmshConstants()
-
     # Data structures for storing cell and face index for the local problems, together
     # with the corresponding transmissibilities.
     coarse_cell_ind, coarse_face_ind, trm = [], [], []
@@ -459,39 +460,39 @@ def compute_transmissibilies(
     # domain boundary; we will dump all grids not on the macro domain boundary shortly
     if coarse_grid.dim == 2:
         # Create all 2d grids that correspond to an auxiliary surface
-        constraint_surfaces, _ = mesh_2_grid.create_1d_grids(
+        constraint_surfaces, _ = msh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            line_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
+            line_tag=PhysicalNames.AUXILIARY.value,
         )
-        micro_domain_boundary, _ = mesh_2_grid.create_1d_grids(
+        micro_domain_boundary, _ = msh_2_grid.create_1d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
-            line_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY,
+            line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE.value,
         )
 
     else:
         # EK: 3d domains have not been tested.
         # Create all 2d grids that correspond to a domain boundary
-        constraint_surfaces = mesh_2_grid.create_2d_grids(
+        constraint_surfaces = msh_2_grid.create_2d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=gmsh_constants.PHYSICAL_NAME_AUXILIARY,
+            surface_tag=PhysicalNames.AUXILIARY.value,
         )
-        micro_domain_boundary = mesh_2_grid.create_2d_grids(
+        micro_domain_boundary = msh_2_grid.create_2d_grids(
             pts,
             cells,
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=gmsh_constants.PHYSICAL_NAME_DOMAIN_BOUNDARY_SURFACE,
+            surface_tag=PhysicalNames.DOMAIN_BOUNDARY_SURFACE.value,
         )
 
     # In the main loop over micro surface grids below, we need access to a limited set

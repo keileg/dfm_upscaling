@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import numpy as np
 import porepy as pp
+from porepy.fracs.gmsh_interface import Tags, GmshWriter
 from typing import Union, Tuple, List, Optional
 
 
@@ -63,8 +64,7 @@ class InteractionRegion:
     def mesh(
         self, mesh_args=None
     ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
-        """ Create a local mesh for this interaction region.
-        """
+        """Create a local mesh for this interaction region."""
         if mesh_args is None:
 
             # Find the minimum extent of the domain along coordinate axis, use this to
@@ -83,11 +83,11 @@ class InteractionRegion:
             return self._mesh_3d(mesh_args)
 
     def _mesh_2d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
-        """ To create a local grid bucket in 2d, we should:
-            1) Create the bounding surfaces, from self.surfaces
-                i) Find coordinates of all surfaces
-                ii) Remove duplicate nodes
-                iii) Create a FractureNetwork2d object, create a mesh
+        """To create a local grid bucket in 2d, we should:
+        1) Create the bounding surfaces, from self.surfaces
+            i) Find coordinates of all surfaces
+            ii) Remove duplicate nodes
+            iii) Create a FractureNetwork2d object, create a mesh
 
         """
         # First, build points and edges for the domain boundary
@@ -173,12 +173,46 @@ class InteractionRegion:
         # in the FractureNetwork, to the ordering of surfaces in this region.
         self.domain_edges_2_reg_surface = sort_ind
 
-        gb = network.mesh(
-            mesh_args=mesh_args,
-            file_name=self.file_name,
-            constraints=edge_2_constraint,
-            preserve_fracture_tags=[k for k in int_tags.keys()],
+        gmsh_data = network.prepare_for_gmsh(
+            mesh_args=mesh_args, constraints=edge_2_constraint
         )
+
+        decomp = network._decomposition
+
+        physical_points = {}
+        for p in decomp["domain_boundary_points"]:
+            physical_points[p] = Tags.DOMAIN_BOUNDARY_POINT.value
+
+        #        gmsh_data.physical_points.update(physical_points)
+
+        #        breakpoint()
+        gmsh_writer = GmshWriter(gmsh_data)
+
+        gmsh_writer.generate(self.file_name)
+
+        grid_list = pp.fracs.simplex.triangle_grid_from_gmsh(
+            self.file_name, constraints=edge_2_constraint
+        )
+
+        # preserve tags for the fractures from the network
+        # we are assuming a coherent numeration between the network
+        # and the created grids
+        frac = np.setdiff1d(
+            np.arange(network.edges.shape[1]), edge_2_constraint, assume_unique=True
+        )
+        for idg, g in enumerate(grid_list[1]):
+            for key in int_tags:
+                if key not in g.tags:
+                    g.tags[key] = int_tags[key][frac][idg]
+
+        gb = pp.meshing.grid_list_to_grid_bucket(grid_list)
+
+        #        gb = network.mesh(
+        #            mesh_args=mesh_args,
+        #            file_name=self.file_name,
+        #            constraints=edge_2_constraint,
+        #            preserve_fracture_tags=[k for k in int_tags.keys()],
+        #        )
 
         return gb, network
 
@@ -321,9 +355,7 @@ class InteractionRegion:
         return bf
 
     def cleanup(self) -> None:
-        """ Delete files used for local mesh generation for this region.
-
-        """
+        """Delete files used for local mesh generation for this region."""
         msh = Path(self.file_name + ".msh")
         geo = Path(self.file_name + ".geo")
         for file in [msh, geo]:
@@ -353,7 +385,7 @@ class InteractionRegion:
 def extract_tpfa_regions(
     g: pp.Grid, faces: np.ndarray = None
 ) -> List[InteractionRegion]:
-    """ Factory method to define tpfa-type interaction regions for specified faces in a
+    """Factory method to define tpfa-type interaction regions for specified faces in a
     grid.
 
     Parameters:
@@ -506,7 +538,7 @@ def extract_tpfa_regions(
 def extract_mpfa_regions(
     g: pp.Grid, nodes: np.ndarray = None
 ) -> List[InteractionRegion]:
-    """ Factory method to define mpfa-type interaction regions for specified faces in a
+    """Factory method to define mpfa-type interaction regions for specified faces in a
     grid.
 
     Parameters:
