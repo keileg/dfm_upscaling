@@ -99,6 +99,19 @@ class InteractionRegion:
             zip(self.surfaces, self.surface_node_type)
         ):
 
+            if self.name == "mpfa":
+                if len(node_type) == 2:
+                    assert "face" in node_type
+                    fi = node_type.index("face")
+                    is_frac = self.g.tags["fracture_faces"][surf[fi]]
+                if is_frac and "node" in node_type:
+                    ni = node_type.index("node")
+                    assert surf[ni] == self.reg_ind
+                    if self.g.tags["node_is_fracture_tip"][self.reg_ind]:
+                        #                        breakpoint()
+                        continue
+            #            if is_frac:
+            #                breakpoint()
             e = np.vstack(
                 (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
             )
@@ -163,21 +176,21 @@ class InteractionRegion:
         # Define a fracture network, using the surface specification as boundary,
         # and the constraints as points
         # Fractures will be added as edges
-        network = pp.FractureNetwork2d(
+        network_for_meshing = pp.FractureNetwork2d(
             domain=unique_domain_pts[: self.dim, sorted_edges[0]],
             pts=unique_int_pts[: self.dim],
             edges=unique_int_edges,
         )
-        network.tags = int_tags
+        network_for_meshing.tags = int_tags
         # Store the mapping from the ordering of the domain boundaries, as represented
         # in the FractureNetwork, to the ordering of surfaces in this region.
         self.domain_edges_2_reg_surface = sort_ind
 
-        gmsh_data = network.prepare_for_gmsh(
+        gmsh_data = network_for_meshing.prepare_for_gmsh(
             mesh_args=mesh_args, constraints=edge_2_constraint
         )
 
-        decomp = network._decomposition
+        decomp = network_for_meshing._decomposition
 
         physical_points = {}
         for p in decomp["domain_boundary_points"]:
@@ -198,7 +211,9 @@ class InteractionRegion:
         # we are assuming a coherent numeration between the network
         # and the created grids
         frac = np.setdiff1d(
-            np.arange(network.edges.shape[1]), edge_2_constraint, assume_unique=True
+            np.arange(network_for_meshing.edges.shape[1]),
+            edge_2_constraint,
+            assume_unique=True,
         )
         for idg, g in enumerate(grid_list[1]):
             for key in int_tags:
@@ -214,7 +229,7 @@ class InteractionRegion:
         #            preserve_fracture_tags=[k for k in int_tags.keys()],
         #        )
 
-        return gb, network
+        return gb, network_for_meshing
 
     def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
