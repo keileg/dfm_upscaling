@@ -92,8 +92,8 @@ class InteractionRegion:
         """
         # First, build points and edges for the domain boundary
         domain_pts = np.zeros((3, 0))
-        domain_edges = np.zeros((2, 0), dtype=np.int)
-        edge_2_surf = np.empty([], dtype=np.int)
+        domain_edges = np.zeros((2, 0), dtype=int)
+        edge_2_surf = np.empty([], dtype=int)
 
         for surf_ind, (surf, node_type) in enumerate(
             zip(self.surfaces, self.surface_node_type)
@@ -112,8 +112,8 @@ class InteractionRegion:
 
         # Next, build up the constraints
         # Todo: Expand this with fractures contained within the region
-        edge_2_constraint = np.array([], dtype=np.int)
-        constraint_edges = np.empty((2, 0), dtype=np.int)
+        edge_2_constraint = np.array([], dtype=int)
+        constraint_edges = np.empty((2, 0), dtype=int)
         constraint_pts = np.empty((3, 0))
 
         for constraint_ind, (constraint, node_type) in enumerate(
@@ -132,7 +132,7 @@ class InteractionRegion:
             )
 
             edge_2_constraint = np.hstack(
-                (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=np.int))
+                (edge_2_constraint, constraint_ind * np.ones(e.shape[1], dtype=int))
             )
 
         # Uniquify points on the domain boundary
