@@ -328,7 +328,7 @@ class LocalGridBucketSet:
         domain_point_2_g = {}
         for g in g_0d_domain_boundary:
             domain_point_2_g[
-                decomp["domain_boundary_points"][g.physical_name_index]
+                decomp["domain_boundary_points"][g._physical_name_index]
             ] = g
 
         # Similarly, construct 0d grids for the intersection between a fracture and the
@@ -365,7 +365,7 @@ class LocalGridBucketSet:
         # The keys are the indexes in the decomposition of the network.
         frac_bound_point_2_g = {}
         for g in g_0d_frac_bound:
-            frac_bound_point_2_g[fracture_boundary_points[g.physical_name_index]] = g
+            frac_bound_point_2_g[fracture_boundary_points[g._physical_name_index]] = g
 
         # Get the points that form the boundary of the interaction region
         boundary_point_coord, boundary_point_ind = self._network_boundary_points(
@@ -693,7 +693,7 @@ class LocalGridBucketSet:
         # the corresponding 0d grids
         g_0d_boundary_map, g_0d_constraint_map = {}, {}
         for g in g_0d_boundary:
-            g_0d_boundary_map[fracture_boundary_points[g.physical_name_index]] = g
+            g_0d_boundary_map[fracture_boundary_points[g._physical_name_index]] = g
 
         for g in g_0d_constraint:
             g_0d_constraint_map[g.global_point_ind[0]] = g

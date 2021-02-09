@@ -595,7 +595,7 @@ def compute_transmissibilies(
                         # problem
                         edge_flux += (
                             sign
-                            * g_m.master_to_mortar_avg().T
+                            * g_m.primary_to_mortar_avg().T
                             * d_e[pp.STATE]["mortar_flux"]
                         )
 
