@@ -230,7 +230,7 @@ class FVDFM(pp.FVElliptic):
 
         bound_pressure_cell = sps.coo_matrix(
             (data_cell_trace, (rows_cell_trace, cols_cell_trace)),
-            shape=(g.num_faces, g.num_faces),
+            shape=(g.num_faces, g.num_cells),
         ).tocsr()
 
         bound_pressure_face = sps.coo_matrix(
@@ -256,6 +256,9 @@ class FVDFM(pp.FVElliptic):
         matrix_dictionary[self.vector_source_matrix_key] = sps.csc_matrix(
             (g.num_faces, g.num_cells * g.dim)
         )
+        matrix_dictionary[
+            self.bound_pressure_vector_source_matrix_key
+        ] = sps.csc_matrix((g.num_faces, g.num_cells * g.dim))
 
     def _interaction_regions(self, g):
         raise NotImplementedError
