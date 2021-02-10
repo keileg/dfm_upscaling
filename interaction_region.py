@@ -117,31 +117,38 @@ class InteractionRegion:
                 if len(node_type) == 2:
                     # Checks
                     assert "face" in node_type
-                    assert "node" in node_type
-                    ni = node_type.index("node")
+                    fi_edge = node_type.index("face")
+                    if (
+                        self.g.tags["fracture_faces"][surf[fi_edge]]
+                        and "node" in node_type
+                    ):
+                        ni = node_type.index("node")
 
-                    # Consistency check, for mpfa only the central node should be involved
-                    # in the interaction region boundary
-                    assert surf[ni] == self.reg_ind
+                        # Consistency check, for mpfa only the central node should be involved
+                        # in the interaction region boundary
+                        assert surf[ni] == self.reg_ind
 
-                    # If this node is tagged as a tip in the macro grid, fetch the coordinates
-                    # the line from face center to node
-                    if self.g.tags["node_is_fracture_tip"][self.reg_ind]:
-                        # Not sure if this will work for polyline fractures, where
-                        # the tip is not really a tip
-                        if self.is_tip:
-                            # If we have already encountered the tip node,
-                            # Check that the edge is the same as previously found
-                            # Violation of this would be a polyline, I think
-                            assert np.allclose(frac_edge, self.coords(surf, node_type))
-                        self.is_tip = True
-                        # Store the coordinate of the macro fracture.
-                        frac_edge = self.coords(surf, node_type)
-                        # No need to do more for this surface
-                        continue
-                    else:
-                        # No idea how we could end up here
-                        assert False
+                        # If this node is tagged as a tip in the macro grid, fetch the coordinates
+                        # the line from face center to node
+                        if self.g.tags["node_is_fracture_tip"][self.reg_ind]:
+                            # Not sure if this will work for polyline fractures, where
+                            # the tip is not really a tip
+                            if self.is_tip:
+                                # If we have already encountered the tip node,
+                                # Check that the edge is the same as previously found
+                                # Violation of this would be a polyline, I think
+                                assert np.allclose(
+                                    frac_edge, self.coords(surf, node_type)
+                                )
+                            self.is_tip = True
+                            # Store the coordinate of the macro fracture.
+                            frac_edge = self.coords(surf, node_type)
+                            # No need to do more for this surface
+                            continue
+                        else:
+                            # This is not a fracture tip, but internal to fracture.
+                            # Standard treatment should suffice
+                            pass
 
             e = np.vstack(
                 (np.arange(len(node_type) - 1), 1 + np.arange(len(node_type) - 1))
@@ -202,7 +209,7 @@ class InteractionRegion:
         # If this is a tip of a macro fracture, add the part of the macro fracture within
         # this network *at the begining of the fracture list* (will be important later)
         if self.is_tip:
-            int_pts = np.hstack((self.frac_edge, int_pts))
+            int_pts = np.hstack((frac_edge, int_pts))
             int_edges = np.hstack((np.array([[0], [1]]), 2 + int_edges))
             edge_2_constraint += 1
 
@@ -266,7 +273,7 @@ class InteractionRegion:
         #            preserve_fracture_tags=[k for k in int_tags.keys()],
         #        )
 
-        if self.reg.is_tip:
+        if self.is_tip:
             # For 2d tip nodes, we added a macro fracture to the local fracture
             # network, so that the local 2d grid was split along the macro surface.
             # This fracture should not be part of the local problem, and must
@@ -280,9 +287,9 @@ class InteractionRegion:
             # macro scale fracture. This can be removed when we trust the implementation.
             nodes = gf.nodes
             for i in range(2):
-                p = self.reg.frac_edge[:, i].reshape((-1, 1))
+                p = frac_edge[:, i].reshape((-1, 1))
                 dist = np.min(np.sum(np.power(p - nodes, 2), axis=0))
-                assert dist < self.tol
+                assert dist < 1e-8
 
                 # Next remove all lower-dimensional neighbors that are formed by the
                 # intersection with other (micro) fractures. Note that this will
