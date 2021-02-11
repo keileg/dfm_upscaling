@@ -243,8 +243,15 @@ class FVDFM(pp.FVElliptic):
         bc = parameter_dictionary["bc"]
         neumann_faces = np.where(bc.is_neu)[0]
         pp.fvutils.zero_out_sparse_rows(flux, neumann_faces)
-        # Not sure about sign here
-        bound_flux = pp.fvutils.zero_out_sparse_rows(bound_flux, neumann_faces, diag=1)
+
+        # Set sign of Neumann faces according to the divergence operator. This will
+        # counteract minus signs in the divergence during assembly.
+        sgn, _ = g.signs_and_cells_of_boundary_faces(neumann_faces)
+        # Here we also zero out non-diagonal terms, but these should be zero anyhow
+        # (by construction of the coarse problems), but better safe than sorry
+        bound_flux = pp.fvutils.zero_out_sparse_rows(
+            bound_flux, neumann_faces, diag=sgn
+        )
 
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
@@ -306,8 +313,10 @@ class FVDFM(pp.FVElliptic):
             parameter_dictionary,
         )
 
-        matrix_bound_pressure_cell = local_problems.discretize_pressure_trace_macro_bound(
-            g, gb_set, self, cc_assembler, basis_functions
+        matrix_bound_pressure_cell = (
+            local_problems.discretize_pressure_trace_macro_bound(
+                g, gb_set, self, cc_assembler, basis_functions
+            )
         )
 
         (

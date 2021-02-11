@@ -826,7 +826,10 @@ def discretize_boundary_conditions(
                             # For Dirichlet conditions, simply set a unit pressure
                             bc_values[micro_bound_face] = 1
                         else:
-                            bc_values[micro_bound_face] = g.face_areas[micro_bound_face]
+                            # Distribute the Neumann flux between micro faces according
+                            # to their areas.
+                            face_areas = g.face_areas[micro_bound_face]
+                            bc_values[micro_bound_face] = face_areas / face_areas.sum()
 
                 # Get assembler
                 assembler, A = assembler_map[gb]
