@@ -245,7 +245,9 @@ class InteractionRegion:
         #        breakpoint()
         gmsh_writer = GmshWriter(gmsh_data)
 
-        gmsh_writer.generate(self.file_name)
+        # Generate the mesh. Also write .geo file to ease debugging;
+        # we will delete this later on.
+        gmsh_writer.generate(self.file_name, write_geo=True)
 
         grid_list = pp.fracs.simplex.triangle_grid_from_gmsh(
             self.file_name, constraints=edge_2_constraint
@@ -446,7 +448,7 @@ class InteractionRegion:
     def cleanup(self) -> None:
         """Delete files used for local mesh generation for this region."""
         msh = Path(self.file_name + ".msh")
-        geo = Path(self.file_name + ".geo")
+        geo = Path(self.file_name + ".geo_unrolled")
         for file in [msh, geo]:
             if Path.exists(file):
                 Path.unlink(file)
