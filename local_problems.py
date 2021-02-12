@@ -35,21 +35,23 @@ def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     """
     # If the grids are not one dimension appart, there will be no match
     if g_prev.dim != (g_new.dim - 1):
-        return []
+        return [], []
 
     cc = g_prev.cell_centers
     fc = g_new.face_centers
 
     # Find coinciding cell centers and face centers.
     cell_ind = []
+    face_ind = []
 
     for pair in _match_points_on_surface(cc, fc, dim, g_prev.dim, g_prev.nodes):
         # Assign boundary condition
         bc_values[pair[1]] = v_prev[pair[0]]
         # Store the hit
         cell_ind.append(pair[0])
+        face_ind.append(pair[1])
 
-    return cell_ind
+    return cell_ind, face_ind
 
 
 def _match_points_on_surface(
@@ -196,7 +198,6 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
     Calculate basis function related to coarse cells for an interaction region
 
     """
-
     # Identify cells in the interaction region with nodes in the fine-scale grid
     coarse_cell_ind, coarse_cell_cc = reg.coarse_cell_centers()
 
@@ -264,6 +265,10 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
         # The previous values, to be used as boundary conditions for the 1d problems.
         # Note that the value in the other coarse cell centers will be 0 by default.
         prev_values = [(g, v)]
+        # Also keep track of the maximum dimension of the GridBucket from which the
+        # previous values were computed. This is needed to handle a special case related
+        # to high-dimensional couplings below.
+        max_dim_prev_values = [0]
 
         # Loop over all types of buckets
         # gb_set will first consist of 1d and 0d grids, then 2d-0d and finally
@@ -283,7 +288,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                 # Flag for whether the right hand side has non-zero elements
                 trivial_solution = True
 
-                for g_prev, values in prev_values:
+                for prev_dim, (g_prev, values) in zip(max_dim_prev_values, prev_values):
                     # Keep track of which cells in g_prev has been used to define bcs in
                     # this gb.
                     # This is a reasonable approach if the cell center in the previous
@@ -294,8 +299,33 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                     for g, d in gb:
                         # This will update the boundary condition values
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
-                        cells_found = transfer_bc(g_prev, values, g, bc_values, reg.dim)
+                        cells_found, faces_found = transfer_bc(
+                            g_prev, values, g, bc_values, reg.dim
+                        )
                         found[cells_found] = True
+
+                        if len(faces_found) > 0 and prev_dim < gb.dim_max() - 1:
+                            # Special case, where a face in the current dimension hit
+                            # a cell of a grid bucket two dimensions lower. This will be a
+                            # line fracture in a 2d domain intersecting with the cell
+                            # center in the macro grid. In this case, the boundary condition
+                            # for the new grid must be changed to Dirichlet, and the
+                            # right value assigned. The change of type of boundary condition
+                            # further requires rediscretization and reassembly of the local
+                            # linear system.
+                            bc = d[pp.PARAMETERS][discr.keyword]["bc"]
+                            bc.is_dir[faces_found] = True
+                            bc.is_neu[faces_found] = False
+
+                            # Rediscretize local problem
+                            loc_discr = d[pp.DISCRETIZATION][discr.cell_variable][
+                                discr.cell_discr
+                            ]
+                            loc_discr.discretize(g, d)
+                            # Reassemble on this gb, and update the assembler map
+                            assembler, _ = assembler_map[gb]
+                            A_new, _ = assembler.assemble_matrix_rhs(only_matrix=True)
+                            assembler_map[gb] = (assembler, A_new)
 
                     # Verify that either all values in the previous grid has been used
                     # as boundary conditions, or none have (the latter may happen in
@@ -327,32 +357,33 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                 for e, d in gb.edges():
                     debug_pou_map[e] += d[pp.STATE][discr.mortar_variable]
 
-                # Avoid this operation for the highest dimensional gb
+                # Avoid this operation for the highest dimensional gb - that will be
+                # reset after we have stored the values (below)
                 if gb.dim_max() < local_gb.dim:
                     for g, d in gb:
                         # Reset the boundary conditions in preparation for the next
                         # basis function
                         d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
+
                         # Store the pressure values to be used as new boundary
                         # conditions for the problem with one dimension more
                         new_prev_val.append((g, d[pp.STATE][discr.cell_variable]))
-
-            #            if reg.reg_ind == 1:
-            #                breakpoint()
+                        # Also store the dimension of the previosu value
+                        max_dim_prev_values.append(gb.dim_max())
 
             # We are done with all buckets of this dimension. Redefine the current
             # values to previous values, and move on to the next set of buckets.
-            prev_values = new_prev_val
+            prev_values += new_prev_val
 
         # Done with all calculations for this basis function. Store it.
         basis_functions[coarse_ind] = x
 
-        #         if reg.reg_ind == 6:
-        #             if gb.dim_max() == 2:
-        #                 p = x[assembler.dof_ind(gb.grids_of_dimension(2)[0], 'pressure')]
-        #                 pp.plot_grid(gb.grids_of_dimension(2)[0], p)
-        #                 import matplotlib.pyplot
-        #                 matplotlib.pyplot.show()
+        #        if reg.reg_ind == 6:
+        #            if gb.dim_max() == 2:
+        #                p = x[assembler.dof_ind(gb.grids_of_dimension(2)[0], "pressure")]
+        #                pp.plot_grid(gb.grids_of_dimension(2)[0], p)
+        #                import matplotlib.pyplot
+        #                matplotlib.pyplot.show()
         # #                breakpoint()
 
         coarse_gb[coarse_ind] = gb
@@ -363,6 +394,9 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             coarse_bc_values[coarse_ind][g] = d[pp.PARAMETERS]["flow"][
                 "bc_values"
             ].copy()
+            # Now that we have saved the boundary values, we reset them to avoid
+            # disturbing the computation for other basis functions.
+            d[pp.PARAMETERS]["flow"]["bc_values"][:] = 0
 
         # Move on to the next basis function
 
@@ -797,7 +831,9 @@ def discretize_boundary_conditions(
                     for g, d in gb:
                         # This will update the boundary condition values
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
-                        cells_found = transfer_bc(g_prev, values, g, bc_values, reg.dim)
+                        cells_found, _ = transfer_bc(
+                            g_prev, values, g, bc_values, reg.dim
+                        )
                         found[cells_found] = True
                     # Verify that either all values in the previous grid has been used
                     # as boundary conditions, or none have (the latter may happen in
