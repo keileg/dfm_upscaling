@@ -1,6 +1,7 @@
 """
 
 """
+from typing import Dict
 import numpy as np
 import porepy as pp
 import scipy.sparse as sps
@@ -29,7 +30,7 @@ class FVDFM(pp.FVElliptic):
         # method for the discretization (tpfa or mpfa so far)
         self.method = None
 
-    def set_parameters_cell_basis(self, gb, data):
+    def set_parameters_cell_basis(self, gb: pp.GridBucket, data: Dict):
         """
         Assign parameters for the micro gb. Very simple for now, this must be improved.
 
