@@ -281,6 +281,13 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
             # if gb.dim_max() == 1, there will be one gb for each edge in the
             # interaction region, etc.
             for gb in gb_set:
+
+                # If this coarse grid bucket is not involved with the local coarse cell
+                # the solution to the local problem will be all zeros. No need to compute
+                # anything, just go on.
+                if coarse_ind not in gb_set[gb]:
+                    continue
+
                 # Loop over the set of pressure values from the previous dimension
                 # Find matches between previous cells and current faces, and assign
                 # boundary conditions
@@ -341,6 +348,7 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
 
                 # Get assembler
                 assembler, A = assembler_map[gb]
+
                 if trivial_solution:
                     # The solution is known to be zeros
                     x = np.zeros(assembler.num_dof())
@@ -430,7 +438,7 @@ def discretize_pressure_trace_macro_bound(
 ):
     row, col, val = [], [], []
 
-    gb = local_gb.bucket_list()[-1][0]
+    gb = local_gb.gb
     # For now only consider the highest dimensional grids. We could also include cells
     # on fractures touching the micro boundary, but that would require a more ellaborate
     # area weighting (including the aperture of the micro fracture)

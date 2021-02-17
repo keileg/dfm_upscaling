@@ -10,7 +10,7 @@ import numpy as np
 import porepy as pp
 import meshio
 import networkx as nx
-from typing import Dict
+from typing import Dict, List
 
 from porepy.utils.setmembership import unique_columns_tol
 from porepy.fracs import msh_2_grid
@@ -18,8 +18,6 @@ from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
 
 from dfm_upscaling import interaction_region as ia_reg
-
-import pdb
 
 
 class LocalGridBucketSet:
@@ -29,11 +27,19 @@ class LocalGridBucketSet:
         self.reg = reg
         self.tol = 1e-6
 
-    def bucket_list(self):
+
+    def bucket_list(self) -> List[Dict[pp.GridBucket, List[int]]]:
+        """ Get all grid buckets associated with (the boundary of) an interaction region.
+
+        The data is first sorted as a list, with first item being all 0d GridBuckets,
+        next item all 1d etc. Each list item is a dictionary with the GridBuckets as keys,
+        and the macro cell indices to which they are connected as values.
+
+        """
         if self.dim == 2:
-            return [self.line_gb, [self.gb]]
+            return [self.line_gb, {self.gb: self.reg.macro_cell_inds()}]
         else:
-            return [self.line_gb, self.surface_gb, [self.gb]]
+            return [self.line_gb, self.surface_gb, {self.gb: self.reg.macro_cell_inds()}]
 
     def construct_local_buckets(self, data=None):
         if data is None:
@@ -115,7 +121,7 @@ class LocalGridBucketSet:
 
         self.gb = gb
         self.network = network
-
+        network._decomposition = network.decomposition
         decomp = network._decomposition
 
         edges = decomp["edges"]
@@ -383,7 +389,7 @@ class LocalGridBucketSet:
         bound_edge_ind_2_g = {g.frac_num: g for g in g_1d}
 
         # Data structure for storage of 1d grids
-        buckets_1d = []
+        buckets_1d: Dict[pp.GridBucket, List[int]] = {}
 
         # Loop over the edges in the interaction region
         for ia_edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
@@ -541,8 +547,13 @@ class LocalGridBucketSet:
             # Create a grid bucket for this edge
             gb_edge = pp.meshing.grid_list_to_grid_bucket(grid_list)
 
-            # Append the bucket for this ia_edge
-            buckets_1d.append(gb_edge)
+            # The macro cells of this grid bucket corresponds to the items in
+            # ia_edge that are macro cells.
+            cell_in_node_type = [i for i in range(len(node_type)) if node_type[i] == 'cell']
+            cell_ind = ia_edge[cell_in_node_type]
+
+            # Store the bucket - macro cell ind combinations for this ia_edge
+            buckets_1d[gb_edge] = cell_ind
 
         # Store all edge buckets for this region
         for gb in buckets_1d:
@@ -571,23 +582,39 @@ class LocalGridBucketSet:
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=PhysicalNames.DOMAIN_BOUNDARY_SURFACE,
+            surface_tag=PhysicalNames.DOMAIN_BOUNDARY_SURFACE.value,
         )
 
+        # By construction of the meshing in FractureNetwork3d, boundary surfaces are
+        # indexed after auxiliary and fracture surfaces. To map from surfaces in the
+        # fracture network, to the boundary surfaces as defined by the interaction region,
+        # the offset caused by auxiliary and fracture surfaces must be found.
         index_offset = min([g.frac_num for g in g_2d_all])
 
+        # Gather all surfaces that are on the boundary of the interaction region,
+        # but not on the bonudary of the macro domain.
         g_2d = [
             g
             for g in g_2d_all
             if not self.reg.surface_is_boundary[g.frac_num - index_offset]
         ]
 
-        # Map form the frac_num (which by construction in pp.mesh_2_grid will correspond
+        # Map form the frac_num (which by construction in pp.msh_2_grid will correspond
         # to the number part of the gmsh physical name of the surface polygon) to the
         # corresponding physical grid.
         # Note that we need to be careful when accessing this information below, since
         # the frac_num also will count any fracture surface in the network.
         g_2d_map = {g.frac_num: g for g in g_2d}
+
+        # Also make a map between the 2d boundary grids and the macro cells to which
+        # the grids belong. We will need this at the very end of this function, when
+        # identifying surface GridBuckets with macro cell indices.
+        g_2d_2_macro_cell_ind = {}
+        for g in g_2d:
+            surf = self.reg.surfaces[g.frac_num - index_offset]
+            node_type = self.reg.surface_node_type[g.frac_num - index_offset]
+            macro_cells = surf[[i for i in range(len(node_type)) if node_type[i] == 'cell']]
+            g_2d_2_macro_cell_ind[g] = list(macro_cells)
 
         # 1d grids formed on the intersection of fracture surfaces with the domain
         # boundary
@@ -797,7 +824,7 @@ class LocalGridBucketSet:
         # Finally, we can collect the surface grid buckets. There will be one for each
         # cluster, identified above.
         # Data structure
-        surface_buckets = []
+        surface_buckets: Dict[pp.GridBucket, List[int]] = {}
 
         # Loop over clusters
         for c in clusters:
@@ -847,8 +874,14 @@ class LocalGridBucketSet:
             for e in edges_to_remove:
                 gb_loc._edges.pop(e)
 
-            # Store the bucket
-            surface_buckets.append(gb_loc)
+            # Fetch the macro cell ind for all 2d grids of this surface bucket.
+            macro_cells = []
+            for g in g2:
+                macro_cells += g_2d_2_macro_cell_ind[g]
+
+            # Store the bucket and its associated macro cell indices
+            # Uniquify the macro cells
+            surface_buckets[gb_loc] = list(set(macro_cells))
 
         # Tag faces that are on the boundary of the macro domain
         for gb in surface_buckets:
