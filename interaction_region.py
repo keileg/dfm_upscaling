@@ -445,6 +445,22 @@ class InteractionRegion:
 
         return bf
 
+    def macro_cell_inds(self) -> List[int]:
+        """ Find the index of macro cells included in the interaction region.
+
+        Returns:
+            list of int: Index of the macro cells that are in this region.
+
+        """
+        ci: List[int] = []
+        for surf, node_type in zip(self.surfaces, self.surface_node_type):
+            for i, node in enumerate(node_type):
+                if node == 'cell':
+                    ci.append(surf[i])
+
+        # Uniquify
+        return list(set(ci))
+
     def cleanup(self) -> None:
         """Delete files used for local mesh generation for this region."""
         msh = Path(self.file_name + ".msh")
