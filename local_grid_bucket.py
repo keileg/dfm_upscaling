@@ -596,7 +596,7 @@ class LocalGridBucketSet:
             cells,
             phys_names,
             cell_info,
-            line_tag=PhysicalNames.FRACTURE_BOUNDARY_LINE,
+            line_tag=PhysicalNames.FRACTURE_BOUNDARY_LINE.value,
             return_fracture_tips=False,
         )
 
@@ -618,7 +618,7 @@ class LocalGridBucketSet:
             cells,
             phys_names,
             cell_info,
-            line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE,
+            line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE.value,
             constraints=ia_edge,
             return_fracture_tips=False,
         )
@@ -659,7 +659,7 @@ class LocalGridBucketSet:
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=PhysicalNames.FRACTURE_BOUNDARY_POINT,
+            target_tag_stem=PhysicalNames.FRACTURE_BOUNDARY_POINT.value,
         )
 
         # 0d grids for points where a fracture is cut by an auxiliary surface.
@@ -668,7 +668,7 @@ class LocalGridBucketSet:
             cells,
             phys_names,
             cell_info,
-            target_tag_stem=PhysicalNames.FRACTURE_CONSTRAINT_INTERSECTION_POINT,
+            target_tag_stem=PhysicalNames.FRACTURE_CONSTRAINT_INTERSECTION_POINT.value,
         )
         g_0d = g_0d_boundary + g_0d_constraint
 
