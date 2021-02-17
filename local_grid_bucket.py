@@ -739,70 +739,78 @@ class LocalGridBucketSet:
         # It is critical that the operation is carried out before splitting of the
         # nodes, or else the local-to-global node numbering is not applicable.
 
-        # First make a merged cell-node map for all 1d auxiliary grids
-        cn = []
-        # Number of cells per grid. Will be used to define offsets
-        # for cell-node relations for each grid, hence initialize with
-        # zero.
-        num_cn = [0]
-        for lg in g_1d_auxiliary:
-            # Local cell-node relation
-            cn_loc = lg.cell_nodes().indices.reshape(
-                (2, lg.num_cells), order="F"
-            )
-            cn.append(np.sort(lg.global_point_ind[cn_loc], axis=0))
-            num_cn.append(lg.num_cells)
+        # Only look for matches if there are any auxiliary line grids
+        if len(g_1d_auxiliary) > 0:
+            # First make a merged cell-node map for all 1d auxiliary grids
+            cn = []
+            # Number of cells per grid. Will be used to define offsets
+            # for cell-node relations for each grid, hence initialize with
+            # zero.
+            num_cn = [0]
+            for lg in g_1d_auxiliary:
+                # Local cell-node relation
+                cn_loc = lg.cell_nodes().indices.reshape(
+                    (2, lg.num_cells), order="F"
+                )
+                cn.append(np.sort(lg.global_point_ind[cn_loc], axis=0))
+                num_cn.append(lg.num_cells)
 
-        # Stack all cell-nodes, and define offset array
-        cn_all = np.hstack([c for c in cn])
-        cell_node_offsets = np.cumsum(num_cn)
+            # Stack all cell-nodes, and define offset array
+            cn_all = np.hstack([c for c in cn])
+            cell_node_offsets = np.cumsum(num_cn)
 
-        # Loop over surface grids, look for matches between the 2d face-nodes
-        # and the 1d cell-nodes of axiliary grids
-        for hi, hg in enumerate(g_2d):
-            # First connect the 2d grid to itself
-            pairs.append((hi, hi))
+            # Loop over surface grids, look for matches between the 2d face-nodes
+            # and the 1d cell-nodes of axiliary grids
+            for hi, hg in enumerate(g_2d):
+                # First connect the 2d grid to itself
+                pairs.append((hi, hi))
 
-            # Next, connection between hg and lower-dimensional grids.
-            # We have to specify the number of nodes per face to generate a
-            # matrix of the nodes of each face.
-            nodes_per_face = 2
-            fn_loc = hg.face_nodes.indices.reshape(
-                (nodes_per_face, hg.num_faces), order="F"
-            )
-            # Convert to global numbering
-            fn = hg.global_point_ind[fn_loc]
-            fn = np.sort(fn, axis=0)
+                # Next, connection between hg and lower-dimensional grids.
+                # We have to specify the number of nodes per face to generate a
+                # matrix of the nodes of each face.
+                nodes_per_face = 2
+                fn_loc = hg.face_nodes.indices.reshape(
+                    (nodes_per_face, hg.num_faces), order="F"
+                )
+                # Convert to global numbering
+                fn = hg.global_point_ind[fn_loc]
+                fn = np.sort(fn, axis=0)
 
-            # Find intersection between cell-node and face-nodes.
-            # Node nede to sort along 0-axis, we know we've done that above.
-            is_mem, cell_2_face = pp.utils.setmembership.ismember_rows(
-                cn_all, fn, sort=False
-            )
-            # Special treatment if not all cells were found: cell_2_face then only
-            # contains those cells found; to make them conincide with the indices
-            # of is_mem (that is, as the faces are stored in cn_all), we expand the
-            # cell_2_face array
-            if is_mem.size != cell_2_face.size:
-                # If something goes wrong here, we will likely get an index of -1
-                # when initializing the sparse matrix below - that should be a
-                # clear indicator.
-                tmp = -np.ones(is_mem.size, dtype=np.int)
-                tmp[is_mem] = cell_2_face
-                cell_2_face = tmp
+                # Find intersection between cell-node and face-nodes.
+                # Node nede to sort along 0-axis, we know we've done that above.
+                is_mem, cell_2_face = pp.utils.setmembership.ismember_rows(
+                    cn_all, fn, sort=False
+                )
+                # Special treatment if not all cells were found: cell_2_face then only
+                # contains those cells found; to make them conincide with the indices
+                # of is_mem (that is, as the faces are stored in cn_all), we expand the
+                # cell_2_face array
+                if is_mem.size != cell_2_face.size:
+                    # If something goes wrong here, we will likely get an index of -1
+                    # when initializing the sparse matrix below - that should be a
+                    # clear indicator.
+                    tmp = -np.ones(is_mem.size, dtype=np.int)
+                    tmp[is_mem] = cell_2_face
+                    cell_2_face = tmp
 
-            # Then loop over all 1d grids, look for matches with this 2d grid
-            for li, lg in enumerate(g_1d_auxiliary):
-                ind = slice(cell_node_offsets[li], cell_node_offsets[li + 1])
-                loc_mem = is_mem[ind]
-                # Register the grid pair is there is a match between the grids
-                if np.sum(loc_mem) > 0:
-                    pairs.append((hi, li + num_2d_grids))
+                # Then loop over all 1d grids, look for matches with this 2d grid
+                for li, lg in enumerate(g_1d_auxiliary):
+                    ind = slice(cell_node_offsets[li], cell_node_offsets[li + 1])
+                    loc_mem = is_mem[ind]
+                    # Register the grid pair is there is a match between the grids
+                    if np.sum(loc_mem) > 0:
+                        pairs.append((hi, li + num_2d_grids))
 
         # To find the isolated components, make the pairs into a graph.
         graph = nx.Graph()
-        for couple in pairs:
-            graph.add_edge(couple[0], couple[1])
+        if len(pairs) > 0:
+            for couple in pairs:
+                graph.add_edge(couple[0], couple[1])
+        else:
+            # If no pairs were found, we add the 2d surfaces separately
+            for i in range(len(g_2d)):
+                graph.add_node(i)
+            #breakpoint()
 
         # Clusters refers to 2d surfaces, together wiht 1d auxiliary nodes that should
         # be solved together. Index up to num_2d_grids points to 2d grids, accessed via
