@@ -445,6 +445,17 @@ class InteractionRegion:
 
         return bf
 
+    def _find_coarse_inds(self, nt: str) -> List[int]:
+        ci: List[int] = []
+        for surf, node_type in zip(self.surfaces, self.surface_node_type):
+            for i, node in enumerate(node_type):
+                if node == nt:
+                    ci.append(surf[i])
+
+        # Uniquify
+        return list(set(ci))
+
+
     def macro_cell_inds(self) -> List[int]:
         """ Find the index of macro cells included in the interaction region.
 
@@ -452,14 +463,18 @@ class InteractionRegion:
             list of int: Index of the macro cells that are in this region.
 
         """
-        ci: List[int] = []
-        for surf, node_type in zip(self.surfaces, self.surface_node_type):
-            for i, node in enumerate(node_type):
-                if node == 'cell':
-                    ci.append(surf[i])
+        return self._find_coarse_inds('cell')
 
-        # Uniquify
-        return list(set(ci))
+    def macro_face_ind(self) -> List[int]:
+        """ Find the index of macro faces included in the interaction region.
+
+        Returns:
+            list of int: Index of the macro faces that are in this region.
+
+        """
+
+        return self._find_coarse_inds('face')
+
 
     def cleanup(self) -> None:
         """Delete files used for local mesh generation for this region."""
