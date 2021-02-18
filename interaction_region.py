@@ -881,10 +881,26 @@ def _find_edges(
     sorted_face_ind_ext = sorted_face_ind[not_central_node]
 
     # Nodes that occur more than once are part of at least two faces, thus there is an
-    # edge going from the central to that other node
-    # This may not be true for sufficiently degenerated grids (not sure what that means,
-    # possibly something with hanging nodes).
-    multiple_occur = np.where(np.bincount(sorted_node_ind_ext) > 1)[0]
+    # edge going from the central to that other node.
+    # Exception: Split faces on the rim of a fracture may give multiple occurences of a node
+    # even if the node is not part of the interaction region. This will happen for a
+    # Cartesian 3d grid with a fracture of a single cell, the node diagonally from the
+    # central node is shared by the split faces, and will be picked up. Correct for
+    # this below (and yes, that case was not easy to debug).
+
+    # Count the number of occurences of nodes
+    node_counts = np.bincount(sorted_node_ind_ext)
+    # Count the number of occurences, considering only nodes associated with fracture faces
+    node_counts_fracture_faces = np.bincount(
+        sorted_node_ind_ext[g.tags['fracture_faces'][sorted_face_ind_ext]], minlength=node_counts.size
+        )
+    # Nodes occuring multiple times on fracture faces have their count reduced by one.
+    # This will reduce the count also for nodes that should be part of edges in the region,
+    # however, these will also occur on other faces, not fractures, thus have a count
+    # larger than 1 after adjustment
+    node_counts[node_counts_fracture_faces > 1] -= 1
+
+    multiple_occur = np.where(node_counts > 1)[0]
     hit = np.in1d(sorted_node_ind_ext, multiple_occur)
 
     # Edges (represented by the node that is not the central one), and the faces of the
