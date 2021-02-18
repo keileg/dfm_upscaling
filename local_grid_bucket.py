@@ -589,7 +589,10 @@ class LocalGridBucketSet:
         # indexed after auxiliary and fracture surfaces. To map from surfaces in the
         # fracture network, to the boundary surfaces as defined by the interaction region,
         # the offset caused by auxiliary and fracture surfaces must be found.
-        index_offset = min([g.frac_num for g in g_2d_all])
+        # Note that macro faces corresponding to macro faces that were added in the
+        # local meshing must be subtracted (these were added at the very begining of
+        # the list of fractures, see InteractionRegion._mesh_3d()).
+        index_offset = min([g.frac_num for g in g_2d_all]) - self.reg.num_macro_frac_faces
 
         # Gather all surfaces that are on the boundary of the interaction region,
         # but not on the bonudary of the macro domain.

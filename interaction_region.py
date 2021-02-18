@@ -58,6 +58,11 @@ class InteractionRegion:
         # True if central node is tip (understood, this is mpfa)
         self.is_tip: bool = False
 
+        # Number of artificial fractures introduced to mimic the impact of
+        # macroscale fractures, see self._mesh_3d() for details (where the variable is
+        # modified as needed). Only needed in 3d
+        self.num_macro_frac_faces: int = 0
+
     def mesh(
         self, mesh_args=None
     ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
@@ -364,8 +369,11 @@ class InteractionRegion:
         # and the constraints.
         polygons: List[np.ndarray] = macro_frac_surfaces + self.fractures + constraints
 
+        # Update number of macro faces introduced.
+        self.num_macro_frac_faces = len(macro_frac_surfaces)
+
         constraint_inds = (
-            len(macro_frac_surfaces) + len(self.fractures) + np.arange(len(constraints))
+            self.num_macro_frac_faces + len(self.fractures) + np.arange(len(constraints))
         )
 
         network = pp.FractureNetwork3d(polygons)
