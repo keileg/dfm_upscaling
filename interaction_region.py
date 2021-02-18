@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Mon Mar  2 14:32:39 2020
 
@@ -59,10 +57,6 @@ class InteractionRegion:
 
         # True if central node is tip (understood, this is mpfa)
         self.is_tip: bool = False
-
-    ####################
-    ## Functions related to meshing of fracture networks
-    ####################
 
     def mesh(
         self, mesh_args=None
@@ -309,8 +303,53 @@ class InteractionRegion:
 
     def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
 
+        # List of surfaces that make up the region boundary
         boundaries: List[np.ndarray] = []
+        # List of region surfaces that form part of a macroscale fracture face.
+        macro_frac_surfaces: List[np.ndarray] = []
+
+        # Macroscale fracture faces should not be included in the boundary of the
+        # interaction region. However, the fractures must be represented in the local
+        # grid bucket (really, the faces of the 3d grid along the fracture face
+        # must be split). To that end, we first identify which surfaces in the
+        # macro region corresponds to macro faces
+        if self.name == "mpfa":
+            tip_node = self.g.tags["node_is_tip_of_some_fracture"][self.reg_ind]
+            macro_faces = self.macro_face_ind()
+
+            # This is the list of face indices, which, when encountered in the loop
+            # of region surfaces below, will trigger addition to macro_frac_surfaces.
+            # Note that the other (split) version of this macro face is simply ignored
+            # in the below loop, or else we would have added the fracture twice.
+            here_faces = []
+            for fi in macro_faces:
+                hit = np.where(self.g.frac_pairs[0] == fi)[0]
+                if hit.size > 0 and self.g.frac_pairs[1, hit][0] in macro_faces:
+                    here_faces.append(fi)
+        else:
+            # This is a tpfa region, where the notion of tip nodes make no sense
+            tip_node = False
+
         for surf, node_type in zip(self.surfaces, self.surface_node_type):
+            if self.name == "mpfa":
+                if tip_node and "node" in node_type:
+                    assert "face" in node_type
+                    face = node_type.index("face")
+                    global_face_ind = surf[face]
+                    frac_face = self.g.tags["fracture_faces"][global_face_ind]
+                    # If this is a fracture face, we may add it (if it is here),
+                    # but it will not be appended to the region boundary
+                    if frac_face:
+                        # Register the macro face, but only on the here side, to avoid duplicates
+                        if global_face_ind in here_faces:
+                            macro_frac_surfaces.append(
+                                pp.Fracture(self.coords(surf, node_type))
+                            )
+                        # Do not add surface to region boundary
+                        continue
+
+            # We will make it to here, unless this is a mpfa region on a tip node,
+            # and the surfaces is based on what is a macroscale fracture.
             boundaries.append(self.coords(surf, node_type))
 
         # The ordering of the network boundary surfaces is the same as for the IAreg
@@ -321,9 +360,13 @@ class InteractionRegion:
         for constraint, node_type in zip(self.constraints, self.constraint_node_type):
             constraints.append(pp.Fracture(self.coords(constraint, node_type)))
 
-        polygons: List[np.ndarray] = self.fractures + constraints
+        # The polygons to be used for meshing are the macro and micro surfaces,
+        # and the constraints.
+        polygons: List[np.ndarray] = macro_frac_surfaces + self.fractures + constraints
 
-        constraint_inds = len(self.fractures) + np.arange(len(constraints))
+        constraint_inds = (
+            len(macro_frac_surfaces) + len(self.fractures) + np.arange(len(constraints))
+        )
 
         network = pp.FractureNetwork3d(polygons)
         ind_map = network.impose_external_boundary(boundaries)
@@ -334,11 +377,36 @@ class InteractionRegion:
             assert ui.size == 1
             updated_constraint_inds.append(ui[0])
 
+        # Generate local mesh for the interaction region
         gb = network.mesh(
             mesh_args=mesh_args,
             file_name=self.file_name,
             constraints=updated_constraint_inds,
         )
+
+        # In the construction of the grid bucket, the 3d grid had its faces split along
+        # all fractures, hereunder any artifical fracture that was inserted to compensate
+        # for a macroscale fracture face. The final step is to delete these grids, and
+        # all connection between such grids and other (will be microscale) fractures.
+        # In the process, the connectivity within a microscale fracture which crosses a
+        # macro fracture is broken, however, this will be compensated in the macroscale
+        # fracture-matrix interaction.
+        if tip_node:
+            grids_to_remove = gb.grids_of_dimension(2)[: len(macro_frac_surfaces)]
+            for rem in grids_to_remove:
+                # Pick out intersection lines in the plane of the fake fracture
+                neigh_1d = gb.node_neighbors(rem, only_lower=True)
+                for neigh in neigh_1d:
+                    # Pick out 0d point grids
+                    neigh_0d = gb.node_neighbors(neigh, only_lower=True)
+                    for point in neigh_0d:
+                        # First remove the 0d node. This alse deletes all edges between
+                        # this node and intersection lines
+                        gb.remove_node(point)
+                    # All connections to 0d points are deleted, we can delete the line
+                    gb.remove_node(neigh)
+                # .. and delete the 2d grid.
+                gb.remove_node(rem)
 
         return gb, network
 
@@ -394,8 +462,6 @@ class InteractionRegion:
         unique_ci, ind = np.unique(ci, return_index=True)
 
         return unique_ci, coords[:, ind]
-
-    ###### Utility functions
 
     def bounding_box(self):
         """
@@ -455,7 +521,6 @@ class InteractionRegion:
         # Uniquify
         return list(set(ci))
 
-
     def macro_cell_inds(self) -> List[int]:
         """ Find the index of macro cells included in the interaction region.
 
@@ -463,7 +528,7 @@ class InteractionRegion:
             list of int: Index of the macro cells that are in this region.
 
         """
-        return self._find_coarse_inds('cell')
+        return self._find_coarse_inds("cell")
 
     def macro_face_ind(self) -> List[int]:
         """ Find the index of macro faces included in the interaction region.
@@ -473,8 +538,7 @@ class InteractionRegion:
 
         """
 
-        return self._find_coarse_inds('face')
-
+        return self._find_coarse_inds("face")
 
     def cleanup(self) -> None:
         """Delete files used for local mesh generation for this region."""
@@ -786,7 +850,6 @@ def extract_mpfa_regions(
                     ci = np.array([ci])
                 else:
                     ci = cell_faces[:, fi]
-
                 # Loop over all edges of this face
                 for ei in other_node[face_of_edge == fi]:
                     for c in ci:
@@ -892,8 +955,9 @@ def _find_edges(
     node_counts = np.bincount(sorted_node_ind_ext)
     # Count the number of occurences, considering only nodes associated with fracture faces
     node_counts_fracture_faces = np.bincount(
-        sorted_node_ind_ext[g.tags['fracture_faces'][sorted_face_ind_ext]], minlength=node_counts.size
-        )
+        sorted_node_ind_ext[g.tags["fracture_faces"][sorted_face_ind_ext]],
+        minlength=node_counts.size,
+    )
     # Nodes occuring multiple times on fracture faces have their count reduced by one.
     # This will reduce the count also for nodes that should be part of edges in the region,
     # however, these will also occur on other faces, not fractures, thus have a count
@@ -908,5 +972,4 @@ def _find_edges(
     # combination of an edge and a face should be so.
     nodes_on_edges = sorted_node_ind_ext[hit]
     face_of_edges = sorted_face_ind_ext[hit]
-
     return nodes_on_edges, face_of_edges
