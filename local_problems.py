@@ -320,19 +320,24 @@ def cell_basis_functions(reg, local_gb, discr, macro_data):
                             # right value assigned. The change of type of boundary condition
                             # further requires rediscretization and reassembly of the local
                             # linear system.
-                            bc = d[pp.PARAMETERS][discr.keyword]["bc"]
-                            bc.is_dir[faces_found] = True
-                            bc.is_neu[faces_found] = False
-
-                            # Rediscretize local problem
                             loc_discr = d[pp.DISCRETIZATION][discr.cell_variable][
                                 discr.cell_discr
                             ]
-                            loc_discr.discretize(g, d)
-                            # Reassemble on this gb, and update the assembler map
-                            assembler, _ = assembler_map[gb]
-                            A_new, _ = assembler.assemble_matrix_rhs(only_matrix=True)
-                            assembler_map[gb] = (assembler, A_new)
+                            # Rediscretize local problem, unless this is a 1d auxiliary line
+                            # where a continuity condition has been imposed (this effectively
+                            # will have no boundary condition). In the latter case, it would not
+                            # hurt to rediscretize, but it is not necessary.
+                            if not isinstance(loc_discr, pp.numerics.fv.fv_elliptic.EllipticDiscretizationZeroPermeability):
+                                loc_discr.discretize(g, d)
+
+                                bc = d[pp.PARAMETERS][discr.keyword]["bc"]
+                                bc.is_dir[faces_found] = True
+                                bc.is_neu[faces_found] = False
+                                breakpoint()
+                                # Reassemble on this gb, and update the assembler map
+                                assembler, _ = assembler_map[gb]
+                                A_new, _ = assembler.assemble_matrix_rhs(only_matrix=True)
+                                assembler_map[gb] = (assembler, A_new)
 
                     # Verify that either all values in the previous grid has been used
                     # as boundary conditions, or none have (the latter may happen in
