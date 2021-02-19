@@ -39,7 +39,11 @@ class LocalGridBucketSet:
         if self.dim == 2:
             return [self.line_gb, {self.gb: self.reg.macro_cell_inds()}]
         else:
-            return [self.line_gb, self.surface_gb, {self.gb: self.reg.macro_cell_inds()}]
+            return [
+                self.line_gb,
+                self.surface_gb,
+                {self.gb: self.reg.macro_cell_inds()},
+            ]
 
     def construct_local_buckets(self, data=None):
         if data is None:
@@ -549,7 +553,9 @@ class LocalGridBucketSet:
 
             # The macro cells of this grid bucket corresponds to the items in
             # ia_edge that are macro cells.
-            cell_in_node_type = [i for i in range(len(node_type)) if node_type[i] == 'cell']
+            cell_in_node_type = [
+                i for i in range(len(node_type)) if node_type[i] == "cell"
+            ]
             cell_ind = ia_edge[cell_in_node_type]
 
             # Store the bucket - macro cell ind combinations for this ia_edge
@@ -589,17 +595,38 @@ class LocalGridBucketSet:
         # indexed after auxiliary and fracture surfaces. To map from surfaces in the
         # fracture network, to the boundary surfaces as defined by the interaction region,
         # the offset caused by auxiliary and fracture surfaces must be found.
-        # Note that macro faces corresponding to macro faces that were added in the
-        # local meshing must be subtracted (these were added at the very begining of
-        # the list of fractures, see InteractionRegion._mesh_3d()).
-        index_offset = min([g.frac_num for g in g_2d_all]) - self.reg.num_macro_frac_faces
+        index_offset = min([g.frac_num for g in g_2d_all])
+
+        # Create maps between surface grids and their representation in the list of
+        # region surfaces. This is a bit technical, since in the presence of macro fractures,
+        # some of the region surfaces might have been dropeed from the region boundary
+        # description before mesh construction (see InteractionRegion._mesh_3d()).
+        g_2_surface_ind = {}
+        # Also make a map between the index a surface would have when adjusting for
+        # region constraints and microscale fractures (but not for macro fracture faces)
+        # to the index in the region surface list (accounting for the macro fractures).
+        # EK: it may be possible to make do without this construct, but that was beyond me.
+        surface_index_adjustment_map = {}
+
+        # Loop over all 2d grids, make a map
+        # Adjustment compensates for surfaces being dropped because they were macro fracture faces
+        adjustment = 0
+        for g in g_2d_all:
+            # Index without macro fracture faces
+            tmp_index = g.frac_num - index_offset
+
+            # Check if we have passed a new macro fracture face. If so, ramp up the adjustment
+            # term
+            if tmp_index + adjustment in self.reg.ind_surf_on_macro_frac:
+                adjustment += 1
+            # Add to the maps
+            g_2_surface_ind[g] = tmp_index + adjustment
+            surface_index_adjustment_map[tmp_index] = tmp_index + adjustment
 
         # Gather all surfaces that are on the boundary of the interaction region,
         # but not on the bonudary of the macro domain.
         g_2d = [
-            g
-            for g in g_2d_all
-            if not self.reg.surface_is_boundary[g.frac_num - index_offset]
+            g for g in g_2d_all if not self.reg.surface_is_boundary[g_2_surface_ind[g]]
         ]
 
         # Map form the frac_num (which by construction in pp.msh_2_grid will correspond
@@ -614,9 +641,11 @@ class LocalGridBucketSet:
         # identifying surface GridBuckets with macro cell indices.
         g_2d_2_macro_cell_ind = {}
         for g in g_2d:
-            surf = self.reg.surfaces[g.frac_num - index_offset]
-            node_type = self.reg.surface_node_type[g.frac_num - index_offset]
-            macro_cells = surf[[i for i in range(len(node_type)) if node_type[i] == 'cell']]
+            surf = self.reg.surfaces[g_2_surface_ind[g]]
+            node_type = self.reg.surface_node_type[g_2_surface_ind[g]]
+            macro_cells = surf[
+                [i for i in range(len(node_type)) if node_type[i] == "cell"]
+            ]
             g_2d_2_macro_cell_ind[g] = list(macro_cells)
 
         # 1d grids formed on the intersection of fracture surfaces with the domain
@@ -752,9 +781,7 @@ class LocalGridBucketSet:
             num_cn = [0]
             for lg in g_1d_auxiliary:
                 # Local cell-node relation
-                cn_loc = lg.cell_nodes().indices.reshape(
-                    (2, lg.num_cells), order="F"
-                )
+                cn_loc = lg.cell_nodes().indices.reshape((2, lg.num_cells), order="F")
                 cn.append(np.sort(lg.global_point_ind[cn_loc], axis=0))
                 num_cn.append(lg.num_cells)
 
@@ -813,7 +840,6 @@ class LocalGridBucketSet:
             # If no pairs were found, we add the 2d surfaces separately
             for i in range(len(g_2d)):
                 graph.add_node(i)
-            #breakpoint()
 
         # Clusters refers to 2d surfaces, together wiht 1d auxiliary nodes that should
         # be solved together. Index up to num_2d_grids points to 2d grids, accessed via
@@ -835,8 +861,13 @@ class LocalGridBucketSet:
 
         # Loop over the surface grids, find their embedded lower-dimensional grids
         for si in np.where(network.tags["boundary"])[0]:
-            if self.reg.surface_is_boundary[si - index_offset]:
+            # Check if the region is on the macro boundary, compensating first for
+            # micro fractures and constraints (index_offset), next macro fracture faces.
+            if self.reg.surface_is_boundary[
+                surface_index_adjustment_map[si - index_offset]
+            ]:
                 continue
+
             g_surf = g_2d_map[si]
 
             # 1d fracture grids are available from the network decomposition

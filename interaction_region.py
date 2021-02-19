@@ -58,10 +58,9 @@ class InteractionRegion:
         # True if central node is tip (understood, this is mpfa)
         self.is_tip: bool = False
 
-        # Number of artificial fractures introduced to mimic the impact of
-        # macroscale fractures, see self._mesh_3d() for details (where the variable is
-        # modified as needed). Only needed in 3d
-        self.num_macro_frac_faces: int = 0
+        # Index of surfaces that are macroscale fractures, see self._mesh_3d() for details.
+        # Only needed in 3d.
+        self.ind_surf_on_macro_frac: np.ndarray = np.array([])
 
     def mesh(
         self, mesh_args=None
@@ -313,6 +312,8 @@ class InteractionRegion:
         # List of region surfaces that form part of a macroscale fracture face.
         macro_frac_surfaces: List[np.ndarray] = []
 
+        ind_surf_on_macro_frac = []
+
         # Macroscale fracture faces should not be included in the boundary of the
         # interaction region. However, the fractures must be represented in the local
         # grid bucket (really, the faces of the 3d grid along the fracture face
@@ -335,7 +336,9 @@ class InteractionRegion:
             # This is a tpfa region, where the notion of tip nodes make no sense
             tip_node = False
 
-        for surf, node_type in zip(self.surfaces, self.surface_node_type):
+        for si, (surf, node_type) in enumerate(
+            zip(self.surfaces, self.surface_node_type)
+        ):
             if self.name == "mpfa":
                 if tip_node and "node" in node_type:
                     assert "face" in node_type
@@ -350,12 +353,18 @@ class InteractionRegion:
                             macro_frac_surfaces.append(
                                 pp.Fracture(self.coords(surf, node_type))
                             )
+                        # Take note that this surface was on a macro fracture face, and was not
+                        # added to the boundary of the interaction region.
+                        ind_surf_on_macro_frac.append(si)
                         # Do not add surface to region boundary
                         continue
 
             # We will make it to here, unless this is a mpfa region on a tip node,
             # and the surfaces is based on what is a macroscale fracture.
             boundaries.append(self.coords(surf, node_type))
+
+        # Store indices of region surfaces not added to the boundary.
+        self.ind_surf_on_macro_frac = np.array(ind_surf_on_macro_frac)
 
         # The ordering of the network boundary surfaces is the same as for the IAreg
         self.domain_edges_2_reg_surface = np.arange(len(boundaries))
@@ -373,7 +382,9 @@ class InteractionRegion:
         self.num_macro_frac_faces = len(macro_frac_surfaces)
 
         constraint_inds = (
-            self.num_macro_frac_faces + len(self.fractures) + np.arange(len(constraints))
+            self.num_macro_frac_faces
+            + len(self.fractures)
+            + np.arange(len(constraints))
         )
 
         network = pp.FractureNetwork3d(polygons)
@@ -400,7 +411,9 @@ class InteractionRegion:
         # macro fracture is broken, however, this will be compensated in the macroscale
         # fracture-matrix interaction.
         if tip_node:
-            grids_to_remove = gb.grids_of_dimension(2)[: len(macro_frac_surfaces)]
+            grids_to_remove = gb.grids_of_dimension(2)[
+                : self.ind_surf_on_macro_frac.size
+            ]
             for rem in grids_to_remove:
                 # Pick out intersection lines in the plane of the fake fracture
                 neigh_1d = gb.node_neighbors(rem, only_lower=True)
@@ -530,7 +543,7 @@ class InteractionRegion:
         return list(set(ci))
 
     def macro_cell_inds(self) -> List[int]:
-        """ Find the index of macro cells included in the interaction region.
+        """Find the index of macro cells included in the interaction region.
 
         Returns:
             list of int: Index of the macro cells that are in this region.
@@ -539,7 +552,7 @@ class InteractionRegion:
         return self._find_coarse_inds("cell")
 
     def macro_face_ind(self) -> List[int]:
-        """ Find the index of macro faces included in the interaction region.
+        """Find the index of macro faces included in the interaction region.
 
         Returns:
             list of int: Index of the macro faces that are in this region.
