@@ -9,7 +9,7 @@ Created on Tue Mar 24 06:56:22 2020
 import numpy as np
 import porepy as pp
 from collections import namedtuple
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 
 import scipy.sparse as sps
@@ -17,6 +17,8 @@ from porepy.fracs import msh_2_grid
 from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
 
+from .interaction_region import InteractionRegion
+from .local_grid_bucket import LocalGridBucketSet
 
 def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     """
@@ -193,9 +195,11 @@ def _match_points_on_surface(
     return pairs
 
 
-def cell_basis_functions(reg, local_gb, discr, macro_data):
+def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, discr: pp.FVElliptic, macro_data: Dict):
     """
-    Calculate basis function related to coarse cells for an interaction region
+    Calculate basis function related to coarse cells for an interaction region.
+
+
 
     """
     # Identify cells in the interaction region with nodes in the fine-scale grid
