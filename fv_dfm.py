@@ -177,11 +177,13 @@ class FVDFM(pp.FVElliptic):
         # Get the dictionaries for storage of data and discretization matrices
         parameter_dictionary = data[pp.PARAMETERS][self.keyword]
         matrix_dictionary = data[pp.DISCRETIZATION_MATRICES][self.keyword]
+        # The the local mesh arguments
+        local_mesh_args = data.get("local_mesh_args", None)
 
         micro_network = parameter_dictionary[self.network_keyword]
         num_processes = parameter_dictionary.get("num_processes", 1)
         discr_ig = partial(
-            self._discretize_interaction_region, g, micro_network, parameter_dictionary
+            self._discretize_interaction_region, g, micro_network, parameter_dictionary, local_mesh_args
         )
         if num_processes == 1:
             # run the code in serial, useful also for debug
@@ -284,7 +286,7 @@ class FVDFM(pp.FVElliptic):
             raise ValueError
 
     def _discretize_interaction_region(
-        self, g, micro_network, parameter_dictionary, reg
+        self, g, micro_network, parameter_dictionary, local_mesh_args, reg
     ):
 
         # Add the fractures to be upscaled
