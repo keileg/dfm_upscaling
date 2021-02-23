@@ -392,7 +392,6 @@ class InteractionRegion:
             + len(self.fractures)
             + np.arange(len(constraints))
         )
-
         network = pp.FractureNetwork3d(polygons)
         ind_map = network.impose_external_boundary(boundaries)
 
@@ -985,12 +984,27 @@ def _find_edges(
         sorted_node_ind_ext[g.tags["fracture_faces"][sorted_face_ind_ext]],
         minlength=node_counts.size,
     )
-    # Nodes occuring multiple times on fracture faces have their count reduced by one.
-    # This will reduce the count also for nodes that should be part of edges in the region,
-    # however, these will also occur on other faces, not fractures, thus have a count
-    # larger than 1 after adjustment
-    node_counts[node_counts_fracture_faces > 1] -= 1
+    # There is no need to do special treatment of nodes that are involved in
+    # faces not on fractures.
+    node_only_on_fracture_faces = np.where(np.logical_and(node_counts > 0, node_counts == node_counts_fracture_faces))[0]
 
+    # Loop over all nodes only present on fracture faces. Check if all faces of
+    # the node belong to the same split fracture.
+    for ni in node_only_on_fracture_faces:
+        hit = sorted_node_ind_ext == ni
+        # Faces on the node.
+        face_hit = sorted_face_ind_ext[hit]
+
+        # For all the fracture faces, find which pair it belongs to.
+        frac_face_pair = []
+        for f in face_hit:
+            frac_face_pair.append(np.where(np.any(g.frac_pairs == f, axis=0))[0][0])
+
+        # If all faces of this node belongs to the same node, it should be excluded.
+        if len(set(frac_face_pair)) == 1:
+            node_counts[ni] = 0
+
+    # Nodes that occur more than one time should be included among the edges in the region.
     multiple_occur = np.where(node_counts > 1)[0]
     hit = np.in1d(sorted_node_ind_ext, multiple_occur)
 
@@ -999,4 +1013,5 @@ def _find_edges(
     # combination of an edge and a face should be so.
     nodes_on_edges = sorted_node_ind_ext[hit]
     face_of_edges = sorted_face_ind_ext[hit]
+
     return nodes_on_edges, face_of_edges
