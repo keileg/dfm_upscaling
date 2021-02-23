@@ -84,7 +84,8 @@ class FVDFM(pp.FVElliptic):
             param = {}
 
             if not hasattr(g1, "is_auxiliary") or not g1.is_auxiliary:
-                param["normal_diffusivity"] = 1e2
+                #param["normal_diffusivity"] = 1e2
+                pass
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -150,15 +151,15 @@ class FVDFM(pp.FVElliptic):
                     )
             else:
                 if g1.dim > 1:
-                    mortar_discr = pp.RobinCoupling(
+                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
                         self.keyword, fine_scale_dicsr, fine_scale_dicsr
                     )
                 elif g1.dim == 1:
-                    mortar_discr = pp.RobinCoupling(
+                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
                         self.keyword, fine_scale_dicsr, fine_scale_dicsr_1d
                     )
                 else:
-                    mortar_discr = pp.RobinCoupling(
+                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
                         self.keyword, fine_scale_dicsr_1d, fine_scale_dicsr_1d
                     )
 
