@@ -210,6 +210,9 @@ class InteractionRegion:
             int_pts = np.hstack((frac_edge, int_pts))
             int_edges = np.hstack((np.array([[0], [1]]), 2 + int_edges))
             edge_2_constraint += 1
+            # Also expand the tags with a default value for the macro face-cum-fracture
+            for key, value in int_tags.items():
+                int_tags[key] = np.hstack(([None], value))
 
         # Similarly uniquify points in constraint description
         unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts)
