@@ -328,10 +328,16 @@ class InteractionRegion:
             # Note that the other (split) version of this macro face is simply ignored
             # in the below loop, or else we would have added the fracture twice.
             here_faces = []
+            # Also keep track of the faces on both sides of macro fractures, as
+            # these will trigger special treatment.
+            macro_face_in_region = []
+
             for fi in macro_faces:
                 hit = np.where(self.g.frac_pairs[0] == fi)[0]
                 if hit.size > 0 and self.g.frac_pairs[1, hit][0] in macro_faces:
                     here_faces.append(fi)
+                    macro_face_in_region.append(fi)
+                    macro_face_in_region.append(self.g.frac_pairs[1, hit][0])
         else:
             # This is a tpfa region, where the notion of tip nodes make no sense
             tip_node = False
@@ -344,10 +350,10 @@ class InteractionRegion:
                     assert "face" in node_type
                     face = node_type.index("face")
                     global_face_ind = surf[face]
-                    frac_face = self.g.tags["fracture_faces"][global_face_ind]
-                    # If this is a fracture face, we may add it (if it is here),
+
+                    # If this is a face on a macro face, we may add it (if it is here),
                     # but it will not be appended to the region boundary
-                    if frac_face:
+                    if global_face_ind in macro_face_in_region:
                         # Register the macro face, but only on the here side, to avoid duplicates
                         if global_face_ind in here_faces:
                             macro_frac_surfaces.append(
