@@ -1022,6 +1022,9 @@ class LocalGridBucketSet:
         """
         reg = self.reg
 
+        macro_g: pp.Grid = reg.g
+        macro_cf = macro_g.cell_faces.tocsr()
+
         # Data structures to store faces on macro boundaries in each grid. We keep track
         # of both the faces on the micro boundaries, and the corresponding macro face.
         micro_map: Dict[pp.Grid, np.ndarray] = {}
@@ -1045,12 +1048,14 @@ class LocalGridBucketSet:
             # Loop over all grids in the main gb, and look for faces on the surface.
             for g, _ in gb:
                 # Grids of co-dimension > 1 will not be assigned a bc on the macro
-                # boundary
+                # boundary.
                 if self.reg.dim == 2 and g.dim < reg.dim - 1:
                     continue
 
-                # Find face centers on the region surface
                 fc = g.face_centers
+                cc = g.cell_centers
+
+                # Find face centers on the region surface
                 if reg.dim == 2:
                     dist, _ = pp.distances.points_segments(fc, pts[:, 0], pts[:, 1])
                     on_bound = np.where(dist < self.tol)[0]
@@ -1059,22 +1064,44 @@ class LocalGridBucketSet:
                     on_bound = self._points_in_triangle(pts, fc)
 
                 if on_bound.size > 0:
+                    # On macro domain boundaries, the micro face indices in on_bound are
+                    # what we are looking for. However, if the surface corresponds to a
+                    # macro fracture (thus there are split macro faces laying on the same
+                    # surface), we need to filter away half the micro faces.
+                    # Do this by finding cell centers of micro and macro cells, create
+                    # vectors from cell to face centers, and pick micro faces with vectors
+                    # that point in the same direction as the macro vector.
+
+                    # Create micro vectors
+                    micro_cell_ind = g.cell_faces.tocsr()[on_bound].indices
+                    micro_vec = fc[:, on_bound] - cc[:, micro_cell_ind]
+                    if on_bound.size == 1:
+                        micro_vec = micro_vec.reshape((-1, 1))
+
+                    # Create macro vectors
+                    macro_face_ind = surf[node_type.index("face")]
+                    macro_cell_ind = macro_cf[macro_face_ind].indices[0]
+                    macro_vec = (macro_g.face_centers[:, macro_face_ind] - macro_g.cell_centers[:, macro_cell_ind]).reshape((-1, 1))
+
+                    # Identify micro vectors that point in the same direction as the
+                    # macro vector.
+                    same_side = np.sum(macro_vec * micro_vec, axis=0) > 0
+
                     # Append the micro faces to the list of found indices
-                    micro_map[g] = np.hstack((micro_map[g], on_bound))
+                    micro_map[g] = np.hstack((micro_map[g], on_bound[same_side]))
+
                     # The macro face index needs some more work.
                     if reg.name == "tpfa":
                         # For tpfa-style ia regions, we can use the region index
-                        macro_ind = reg.reg_ind * np.ones(on_bound.size, dtype=np.int)
+                        macro_ind_expanded = macro_face_ind * np.ones(same_side.sum(), dtype=np.int)
                     else:  # mpfa
-                        # in mpfa, look for the face among the surface nodes (there will
-                        # be a single one), use this.
                         # If a ValueError is raised here, there is no 'face' in
                         # node_type, and something is really wrong
-                        macro_ind = surf[node_type.index("face")] * np.ones(
-                            on_bound.size, dtype=np.int
+                        macro_ind_expanded = macro_face_ind * np.ones(
+                            same_side.sum(), dtype=np.int
                         )
                     # Store the information
-                    macro_map[g] = np.hstack((macro_map[g], macro_ind))
+                    macro_map[g] = np.hstack((macro_map[g], macro_ind_expanded))
 
         # Finally, we have found all micro faces that lie on the boundary of the macro
         # domain. The information can safely be stored (had we done this in the above
