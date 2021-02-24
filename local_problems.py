@@ -881,6 +881,11 @@ def discretize_boundary_conditions(
                         else:
                             # Distribute the Neumann flux between micro faces according
                             # to their areas.
+                            # No sign corrections here: Neumann conditions for the (micro) fv
+                            # discretizations are treated as positive for flux out of the domain,
+                            # independent of the direction of the normal vector. Thus the macro
+                            # boundary condition are computed with the same convention (which also
+                            # is the sign convention for mortar fluxes).
                             face_areas = g.face_areas[micro_bound_face]
                             bc_values[micro_bound_face] = face_areas / face_areas.sum()
 
