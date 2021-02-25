@@ -5,7 +5,7 @@ import numpy as np
 import porepy as pp
 
 
-def split_network(network, selection_criterion, logical_op=np.logical_or, **kwargs):
+def split_network(network, selection_criterion, **kwargs):
     """ Construct the network for the macro and micro fractures.
     No modification on the geometry of the fractures is done.
     If the selection_criterion is a vector a logical operator is applied.
@@ -13,6 +13,7 @@ def split_network(network, selection_criterion, logical_op=np.logical_or, **kwar
 
     # select the fractures that are micro
     selection_criterion = np.atleast_1d(selection_criterion)
+    logical_op = kwargs.get("logical_op", np.logical_or)
     micro = logical_op.reduce([sc(network, **kwargs) for sc in selection_criterion])
     # what is not micro is macro
     macro = np.logical_not(micro)
