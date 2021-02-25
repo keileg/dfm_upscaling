@@ -424,7 +424,7 @@ class InteractionRegion:
         # fracture-matrix interaction.
         if tip_node:
             grids_to_remove = gb.grids_of_dimension(2)[
-                : self.ind_surf_on_macro_frac.size
+                : self.num_macro_frac_faces
             ]
             for rem in grids_to_remove:
                 # Pick out intersection lines in the plane of the fake fracture
