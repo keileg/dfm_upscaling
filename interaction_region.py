@@ -96,6 +96,9 @@ class InteractionRegion:
         domain_edges = np.zeros((2, 0), dtype=int)
         edge_2_surf = np.empty([], dtype=int)
 
+        # Empty value for frac_edge - this will be filled in if relevant.
+        frac_edge = np.zeros((3, 0))
+
         for surf_ind, (surf, node_type) in enumerate(
             zip(self.surfaces, self.surface_node_type)
         ):
@@ -134,7 +137,8 @@ class InteractionRegion:
                             if self.is_tip:
                                 # If we have already encountered the tip node,
                                 # Check that the edge is the same as previously found
-                                # Violation of this would be a polyline, I think
+                                # If frac_edge has its initial empty value, something
+                                # is really wrong.
                                 assert np.allclose(
                                     frac_edge, self.coords(surf, node_type)
                                 )
