@@ -824,6 +824,8 @@ def discretize_boundary_conditions(
     # Loop over all macro faces, provide discretization of boundary condition
     for macro_face, surf, edge in surface_edge_pairs:
 
+        macro_area = coarse_g.face_areas[macro_face]
+        
         # Data structure to store the value for the grid bucket set of a lower dimension
         prev_values = []
 
@@ -867,8 +869,8 @@ def discretize_boundary_conditions(
                 for g, d in gb:
                     if hasattr(g, "macro_face_ind"):
                         trivial_solution = False
-
-                        bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
+                        data = d[pp.PARAMETERS][discr.keyword]
+                        bc_values = data["bc_values"]
 
                         # Find those micro faces that form this macro (boundary) face
                         hit = g.macro_face_ind == macro_face
@@ -889,8 +891,10 @@ def discretize_boundary_conditions(
                             # independent of the direction of the normal vector. Thus the macro
                             # boundary condition are computed with the same convention (which also
                             # is the sign convention for mortar fluxes).
-                            face_areas = g.face_areas[micro_bound_face]
-                            bc_values[micro_bound_face] = face_areas / face_areas.sum()
+#                            if g.dim < gb.dim_max():
+#                                breakpoint()
+                            face_areas = g.face_areas[micro_bound_face] * data['aperture'][micro_bound_face]
+                            bc_values[micro_bound_face] = face_areas / macro_area
 
                 # Get assembler
                 assembler, A = assembler_map[gb]
