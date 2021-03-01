@@ -10,7 +10,7 @@ import numpy as np
 import porepy as pp
 import meshio
 import networkx as nx
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from porepy.utils.setmembership import unique_columns_tol
 from porepy.fracs import msh_2_grid
@@ -27,9 +27,8 @@ class LocalGridBucketSet:
         self.reg = reg
         self.tol = 1e-6
 
-
     def bucket_list(self) -> List[Dict[pp.GridBucket, List[int]]]:
-        """ Get all grid buckets associated with (the boundary of) an interaction region.
+        """Get all grid buckets associated with (the boundary of) an interaction region.
 
         The data is first sorted as a list, with first item being all 0d GridBuckets,
         next item all 1d etc. Each list item is a dictionary with the GridBuckets as keys,
@@ -751,7 +750,8 @@ class LocalGridBucketSet:
         # the corresponding 0d grids
         g_0d_boundary_map, g_0d_constraint_map = {}, {}
         for g in g_0d_boundary:
-            g_0d_boundary_map[fracture_boundary_points[g._physical_name_index]] = g
+            ind = np.where(fracture_boundary_points == g._physical_name_index)[0][0]
+            g_0d_boundary_map[ind] = g
 
         for g in g_0d_constraint:
             g_0d_constraint_map[g.global_point_ind[0]] = g
@@ -764,6 +764,7 @@ class LocalGridBucketSet:
         pairs = []
         # bookkeeping
         num_2d_grids = len(g_2d)
+        num_1d_grids = len(g_1d_auxiliary)
 
         # For all surface grids, find all auxiliary grids with which is share
         # nodes (a surface grid face should coincide with a 1d cell).
@@ -772,64 +773,17 @@ class LocalGridBucketSet:
         # nodes, or else the local-to-global node numbering is not applicable.
 
         # Only look for matches if there are any auxiliary line grids
-        if len(g_1d_auxiliary) > 0:
-            # First make a merged cell-node map for all 1d auxiliary grids
-            cn = []
-            # Number of cells per grid. Will be used to define offsets
-            # for cell-node relations for each grid, hence initialize with
-            # zero.
-            num_cn = [0]
-            for lg in g_1d_auxiliary:
-                # Local cell-node relation
-                cn_loc = lg.cell_nodes().indices.reshape((2, lg.num_cells), order="F")
-                cn.append(np.sort(lg.global_point_ind[cn_loc], axis=0))
-                num_cn.append(lg.num_cells)
+        if num_1d_grids > 0:
+            pairs += self._match_cells_faces(g_2d, g_1d_auxiliary, 0, num_2d_grids)
 
-            # Stack all cell-nodes, and define offset array
-            cn_all = np.hstack([c for c in cn])
-            cell_node_offsets = np.cumsum(num_cn)
-
-            # Loop over surface grids, look for matches between the 2d face-nodes
-            # and the 1d cell-nodes of axiliary grids
-            for hi, hg in enumerate(g_2d):
-                # First connect the 2d grid to itself
-                pairs.append((hi, hi))
-
-                # Next, connection between hg and lower-dimensional grids.
-                # We have to specify the number of nodes per face to generate a
-                # matrix of the nodes of each face.
-                nodes_per_face = 2
-                fn_loc = hg.face_nodes.indices.reshape(
-                    (nodes_per_face, hg.num_faces), order="F"
+            # Also
+            if len(g_0d_boundary) > 0:
+                pairs += self._match_cells_faces(
+                    g_1d_auxiliary,
+                    g_0d_boundary,
+                    num_2d_grids,
+                    num_2d_grids + num_1d_grids,
                 )
-                # Convert to global numbering
-                fn = hg.global_point_ind[fn_loc]
-                fn = np.sort(fn, axis=0)
-
-                # Find intersection between cell-node and face-nodes.
-                # Node nede to sort along 0-axis, we know we've done that above.
-                is_mem, cell_2_face = pp.utils.setmembership.ismember_rows(
-                    cn_all, fn, sort=False
-                )
-                # Special treatment if not all cells were found: cell_2_face then only
-                # contains those cells found; to make them conincide with the indices
-                # of is_mem (that is, as the faces are stored in cn_all), we expand the
-                # cell_2_face array
-                if is_mem.size != cell_2_face.size:
-                    # If something goes wrong here, we will likely get an index of -1
-                    # when initializing the sparse matrix below - that should be a
-                    # clear indicator.
-                    tmp = -np.ones(is_mem.size, dtype=np.int)
-                    tmp[is_mem] = cell_2_face
-                    cell_2_face = tmp
-
-                # Then loop over all 1d grids, look for matches with this 2d grid
-                for li, lg in enumerate(g_1d_auxiliary):
-                    ind = slice(cell_node_offsets[li], cell_node_offsets[li + 1])
-                    loc_mem = is_mem[ind]
-                    # Register the grid pair is there is a match between the grids
-                    if np.sum(loc_mem) > 0:
-                        pairs.append((hi, li + num_2d_grids))
 
         # To find the isolated components, make the pairs into a graph.
         graph = nx.Graph()
@@ -904,7 +858,6 @@ class LocalGridBucketSet:
         # cluster, identified above.
         # Data structure
         surface_buckets: Dict[pp.GridBucket, List[int]] = {}
-
         # Loop over clusters
         for c in clusters:
 
@@ -931,10 +884,12 @@ class LocalGridBucketSet:
                             g0 += [g]
                             added_0d_ind.append(g.global_point_ind[0])
 
-                else:
+                elif grid_ind < num_2d_grids + num_1d_grids:
                     # Here we need to adjust the grid index, to account for the
                     # numbering used in defining the pairs above
                     g1 += [g_1d_auxiliary[grid_ind - num_2d_grids]]
+                else:
+                    g0 += [g_0d_boundary[grid_ind - num_2d_grids - num_1d_grids]]
 
             # Make list, make bucket.
             grid_list = [g2, g1, g0]
@@ -1021,6 +976,82 @@ class LocalGridBucketSet:
             self._tag_faces_macro_boundary(gb)
 
         self.surface_gb = surface_buckets
+
+    def _match_cells_faces(
+        self,
+        g_high: List[pp.Grid],
+        g_low: List[pp.Grid],
+        offset_high: int,
+        offset_low: int,
+    ) -> List[Tuple[int, int]]:
+        # First make a merged cell-node map for all lower-dimensional grids
+        cn: List[np.ndarray] = []
+        # Number of cells per grid. Will be used to define offsets
+        # for cell-node relations for each grid, hence initialize with
+        # zero.
+        num_cn = [0]
+        for lg in g_low:
+            # Local cell-node relation
+            if lg.dim > 0:
+                cn_loc = lg.cell_nodes().indices.reshape(
+                    (lg.dim + 1, lg.num_cells), order="F"
+                )
+                cn.append(np.sort(lg.global_point_ind[cn_loc], axis=0))
+            else:
+                # for 0d-grids, this is much simpler
+                cn.append(lg.global_point_ind)
+            #
+            num_cn.append(lg.num_cells)
+
+        # Stack all cell-nodes, and define offset array
+        # enforce a 2d array, also if the grids are 0d
+        cn_all = np.atleast_2d(np.hstack([c for c in cn]))
+        cell_node_offsets = np.cumsum(num_cn)
+
+        pairs: List[Tuple[int, int]] = []
+
+        # Loop over surface grids, look for matches between the 2d face-nodes
+        # and the 1d cell-nodes of axiliary grids
+        for hi, hg in enumerate(g_high):
+            # First connect the 2d grid to itself
+            pairs.append((hi, hi))
+
+            # Next, connection between hg and lower-dimensional grids.
+            # We have to specify the number of nodes per face to generate a
+            # matrix of the nodes of each face.
+            nodes_per_face = hg.dim
+            fn_loc = hg.face_nodes.indices.reshape(
+                (nodes_per_face, hg.num_faces), order="F"
+            )
+            # Convert to global numbering
+            fn = hg.global_point_ind[fn_loc]
+            fn = np.sort(fn, axis=0)
+
+            # Find intersection between cell-node and face-nodes.
+            # Node need to sort along 0-axis, we know we've done that above.
+            is_mem, cell_2_face = pp.utils.setmembership.ismember_rows(
+                cn_all, fn, sort=False
+            )
+            # Special treatment if not all cells were found: cell_2_face then only
+            # contains those cells found; to make them conincide with the indices
+            # of is_mem (that is, as the faces are stored in cn_all), we expand the
+            # cell_2_face array
+            if is_mem.size != cell_2_face.size:
+                # If something goes wrong here, we will likely get an index of -1
+                # when initializing the sparse matrix below - that should be a
+                # clear indicator.
+                tmp = -np.ones(is_mem.size, dtype=np.int)
+                tmp[is_mem] = cell_2_face
+                cell_2_face = tmp
+
+            # Then loop over all low-dim grids, look for matches with this high-dim grid
+            for li, lg in enumerate(g_low):
+                ind = slice(cell_node_offsets[li], cell_node_offsets[li + 1])
+                loc_mem = is_mem[ind]
+                # Register the grid pair is there is a match between the grids
+                if np.sum(loc_mem) > 0:
+                    pairs.append((hi + offset_high, li + offset_low))
+        return pairs
 
     def _match_points(self, p1, p2):
         """Find occurences of coordinates in the second array within the first array.
