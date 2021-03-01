@@ -372,7 +372,10 @@ def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, d
                 for g, d in gb:
                     debug_pou_map[g] += d[pp.STATE][discr.cell_variable]
                 for e, d in gb.edges():
-                    debug_pou_map[e] += d[pp.STATE][discr.mortar_variable]
+                    # In some special cases, there are edges with no variables.
+                    # Safeguard against this.
+                    if 'state' in d.keys():
+                        debug_pou_map[e] += d[pp.STATE][discr.mortar_variable]
 
                 # Avoid this operation for the highest dimensional gb - that will be
                 # reset after we have stored the values (below)
