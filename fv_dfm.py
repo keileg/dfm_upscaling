@@ -84,8 +84,7 @@ class FVDFM(pp.FVElliptic):
             param = {}
 
             if not hasattr(g1, "is_auxiliary") or not g1.is_auxiliary:
-                #param["normal_diffusivity"] = 1e2
-                pass
+                param["normal_diffusivity"] = 1e2
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -116,11 +115,13 @@ class FVDFM(pp.FVElliptic):
         for g, d in gb:
             d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
             if hasattr(g, "is_auxiliary") and g.is_auxiliary:
+                # This is an auxiliary grid, which should impose no constrictions in its
+                # in-plane direction, and continuity in its out-of-plane direction.
                 d[pp.DISCRETIZATION] = {
                     self.cell_variable: {self.cell_discr: void_discr}
                 }
-            #                print(g.cell_centers)
             else:
+                # This is (part of) a fracture. Use Mpfa or Tpfa depending on the dimension.
                 if g.dim > 1:
                     d[pp.DISCRETIZATION] = {
                         self.cell_variable: {self.cell_discr: fine_scale_dicsr}
@@ -137,29 +138,48 @@ class FVDFM(pp.FVElliptic):
         # discretizations are the same.
         for e, d in gb.edges():
             g1, g2 = gb.nodes_of_edge(e)
+            
+            # Set the mortar variable.
+            # NOTE: This is overriden in the case where the higher-dimensional grid is
+            # auxiliary, see below.
             d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
+            
             # The type of lower-dimensional discretization depends on whether this is a
             # (part of a) fracture, or a transition between two line or surface grids.
             if hasattr(g1, "is_auxiliary") and g1.is_auxiliary:
                 if g2.dim > 1:
+                    # This is a connection between a surface and an auxiliary line.
+                    # Impose continuity conditions over the line.
+                    
+                    assert g1.dim == 1  # Cannot imagine this is not True
                     mortar_discr = pp.FluxPressureContinuity(
                         self.keyword, fine_scale_dicsr, void_discr
                     )
                 else:
+                    # Connection between a 1d line (an interaction region edge) and a
+                    # point along that line (could be a coner along the edge.
                     mortar_discr = pp.FluxPressureContinuity(
                         self.keyword, fine_scale_dicsr_1d, void_discr
                     )
+            elif hasattr(g2, "is_auxiliary") and g2.is_auxiliary:
+                # This is an auxiliary line being cut by a point, which should then
+                # be a fracture point. Impose no condition here.
+                assert g2.dim == 1
+                # No variable for this edge - we have no equation for it.
+                d[pp.PRIMARY_VARIABLES] = {}
+                continue
             else:
+                # Standard coupling, with resistance, for the final case.
                 if g1.dim > 1:
-                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
+                    mortar_discr = pp.RobinCoupling(
                         self.keyword, fine_scale_dicsr, fine_scale_dicsr
                     )
                 elif g1.dim == 1:
-                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
+                    mortar_discr = pp.RobinCoupling(
                         self.keyword, fine_scale_dicsr, fine_scale_dicsr_1d
                     )
                 else:
-                    mortar_discr = pp.FluxPressureContinuity( #RobinCoupling(
+                    mortar_discr = pp.RobinCoupling(
                         self.keyword, fine_scale_dicsr_1d, fine_scale_dicsr_1d
                     )
 
