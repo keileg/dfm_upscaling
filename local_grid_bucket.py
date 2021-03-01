@@ -940,19 +940,73 @@ class LocalGridBucketSet:
             grid_list = [g2, g1, g0]
             gb_loc = pp.meshing.grid_list_to_grid_bucket(grid_list)
 
-            # The local grid bucket may contain edges between 1d auxiliary lines
-            # and 0d grids caused by the intersection of a fracture and auxiliary line.
-            # Remove these.
-            edges_to_remove = []
-            for e, _ in gb_loc.edges():
-                g_h, _ = e
-                if g_h.dim == 1 and g_h.is_auxiliary:
-                    #                    breakpoint()
-                    edges_to_remove.append(e)
+            # The tagging of boundary faces in gb_loc is not to be trusted, since the function
+            # which takes care of this (pp.fracs.meshing._tag_faces()) is mainly made for a
+            # single grid in the highest dimension. Fixing these issues seems complex (I tried)
+            # so instead we reimpose boundary information here.
+            # The idea is to find all faces on the boundary of each surface grid, make a
+            # unified list of such faces, and count them. Faces that only occur once are on
+            # the domain boundary (relative to the surface bucket). Correct the boundary
+            # information, and tag those lower-dimensional faces that share a node with the
+            # True boundary surfaces as boundary.
 
-            for e in edges_to_remove:
-                gb_loc._edges.pop(e)
+            # Data structure for boundary information
+            fn_all = np.zeros((2, 0), dtype=int)
+            # Number of boundary faces registered for each surface grid.
+            num_bnd_face = []
 
+            # Loop over surface grids
+            for g in gb_loc.grids_of_dimension(2):
+                bnd_face = g.get_all_boundary_faces()
+                fn_loc = (g.face_nodes[:, bnd_face].indices).reshape(
+                    (2, bnd_face.size), order='F')
+                # Append boundary faces, in terms of global node indices
+                fn_all = np.hstack((fn_all, g.global_point_ind[fn_loc]))
+                # Store number of faces on this boundary
+                num_bnd_face.append(bnd_face.size)
+
+            # Index for first element of fn_all for each surface grid
+            bnd_face_start = np.hstack((0, np.cumsum(num_bnd_face)))
+
+            # Uniquify the face-nodes. The global boundary is those that only occur
+            # once.
+            _, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(fn_all)
+            bnd = np.where(np.bincount(all_2_unique) == 1)[0]
+            # Boolean of boundary faces
+            true_bnd = np.zeros(all_2_unique.size, dtype=bool)
+            true_bnd[np.in1d(all_2_unique, bnd)] = True
+
+            # Data structue for storing nodes on the boundary
+            bnd_nodes = np.array([], dtype=int)
+
+            # Loop again over the surface grids, tag boundary faces, and get global index
+            # of nodes on the boundary
+            for gi, g in enumerate(gb_loc.grids_of_dimension(2)):
+                start = bnd_face_start[gi]
+                end = bnd_face_start[gi + 1]
+
+                # Prepare to reset domain boundary information
+                bnd_tags = np.zeros(g.num_faces, dtype=bool)
+                # Indices of those local boundary faces on the true global boundary
+                loc_bnd = g.get_all_boundary_faces()[true_bnd[start:end]]
+                bnd_tags[loc_bnd] = True
+                # Update tags
+                g.tags['domain_boundary_faces'] = bnd_tags
+
+                # also take note of the global indices of boundary nodes
+                bnd_nodes = np.hstack((bnd_nodes, g.global_point_ind[g.face_nodes[:, loc_bnd].indices]))
+
+            # Uniquify global boundary nodes.
+            unique_bnd_nodes = np.unique(bnd_nodes)
+            # Find nodes on 1d grids that are on the global boundary. This ammounts to
+            # fracture lines extending all the way to the boundary of the interaction
+            # region. Tag the nodes as domain_boundary.
+            for g in gb_loc.grids_of_dimension(1):
+                # 1d faces have a single node
+                fn = g.face_nodes.indices
+                domain_boundary = np.in1d(g.global_point_ind[fn], unique_bnd_nodes)
+                g.tags['domain_boundary_faces'][domain_boundary] = True
+            
             # Fetch the macro cell ind for all 2d grids of this surface bucket.
             macro_cells = []
             for g in g2:
