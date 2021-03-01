@@ -413,6 +413,7 @@ class InteractionRegion:
             mesh_args=mesh_args,
             file_name=self.file_name,
             constraints=updated_constraint_inds,
+            write_geo=True
         )
 
         # In the construction of the grid bucket, the 3d grid had its faces split along
