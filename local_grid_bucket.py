@@ -47,7 +47,6 @@ class LocalGridBucketSet:
     def construct_local_buckets(self, data=None):
         if data is None:
             data = {}
-
         if self.dim == 2:
             self._construct_buckets_2d(data)
         elif self.dim == 3:
@@ -914,7 +913,8 @@ class LocalGridBucketSet:
             for g in gb_loc.grids_of_dimension(2):
                 bnd_face = g.get_all_boundary_faces()
                 fn_loc = (g.face_nodes[:, bnd_face].indices).reshape(
-                    (2, bnd_face.size), order='F')
+                    (2, bnd_face.size), order="F"
+                )
                 # Append boundary faces, in terms of global node indices
                 fn_all = np.hstack((fn_all, g.global_point_ind[fn_loc]))
                 # Store number of faces on this boundary
@@ -946,10 +946,12 @@ class LocalGridBucketSet:
                 loc_bnd = g.get_all_boundary_faces()[true_bnd[start:end]]
                 bnd_tags[loc_bnd] = True
                 # Update tags
-                g.tags['domain_boundary_faces'] = bnd_tags
+                g.tags["domain_boundary_faces"] = bnd_tags
 
                 # also take note of the global indices of boundary nodes
-                bnd_nodes = np.hstack((bnd_nodes, g.global_point_ind[g.face_nodes[:, loc_bnd].indices]))
+                bnd_nodes = np.hstack(
+                    (bnd_nodes, g.global_point_ind[g.face_nodes[:, loc_bnd].indices])
+                )
 
             # Uniquify global boundary nodes.
             unique_bnd_nodes = np.unique(bnd_nodes)
@@ -960,8 +962,8 @@ class LocalGridBucketSet:
                 # 1d faces have a single node
                 fn = g.face_nodes.indices
                 domain_boundary = np.in1d(g.global_point_ind[fn], unique_bnd_nodes)
-                g.tags['domain_boundary_faces'][domain_boundary] = True
-            
+                g.tags["domain_boundary_faces"][domain_boundary] = True
+
             # Fetch the macro cell ind for all 2d grids of this surface bucket.
             macro_cells = []
             for g in g2:
@@ -1166,7 +1168,10 @@ class LocalGridBucketSet:
                     # Create macro vectors
                     macro_face_ind = surf[node_type.index("face")]
                     macro_cell_ind = macro_cf[macro_face_ind].indices[0]
-                    macro_vec = (macro_g.face_centers[:, macro_face_ind] - macro_g.cell_centers[:, macro_cell_ind]).reshape((-1, 1))
+                    macro_vec = (
+                        macro_g.face_centers[:, macro_face_ind]
+                        - macro_g.cell_centers[:, macro_cell_ind]
+                    ).reshape((-1, 1))
 
                     # Identify micro vectors that point in the same direction as the
                     # macro vector.
@@ -1178,7 +1183,9 @@ class LocalGridBucketSet:
                     # The macro face index needs some more work.
                     if reg.name == "tpfa":
                         # For tpfa-style ia regions, we can use the region index
-                        macro_ind_expanded = macro_face_ind * np.ones(same_side.sum(), dtype=np.int)
+                        macro_ind_expanded = macro_face_ind * np.ones(
+                            same_side.sum(), dtype=np.int
+                        )
                     else:  # mpfa
                         # If a ValueError is raised here, there is no 'face' in
                         # node_type, and something is really wrong
