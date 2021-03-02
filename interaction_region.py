@@ -591,8 +591,11 @@ class InteractionRegion:
         s += f"{self.edges.shape[0]} 1d edges\n"
         s += f"{self.surfaces.shape[0]} {self.dim - 1}d surfaces\n"
         s += (
-            f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary"
+            f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary\n"
         )
+        bb = self.bounding_box()
+        s += f"Bounding box: ({bb[0, 0]}, {bb[0, 1]}),"
+        s += f"({bb[1, 0]}, {bb[1, 1]}), ({bb[2, 0]}, {bb[2, 1]})"
 
         return s
 
