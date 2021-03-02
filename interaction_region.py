@@ -413,7 +413,7 @@ class InteractionRegion:
             mesh_args=mesh_args,
             file_name=self.file_name,
             constraints=updated_constraint_inds,
-            write_geo=True
+            write_geo=True,
         )
 
         # In the construction of the grid bucket, the 3d grid had its faces split along
@@ -424,9 +424,7 @@ class InteractionRegion:
         # macro fracture is broken, however, this will be compensated in the macroscale
         # fracture-matrix interaction.
         if tip_node:
-            grids_to_remove = gb.grids_of_dimension(2)[
-                : self.num_macro_frac_faces
-            ]
+            grids_to_remove = gb.grids_of_dimension(2)[: self.num_macro_frac_faces]
             for rem in grids_to_remove:
                 # Pick out intersection lines in the plane of the fake fracture
                 neigh_1d = gb.node_neighbors(rem, only_lower=True)
@@ -994,7 +992,9 @@ def _find_edges(
     )
     # There is no need to do special treatment of nodes that are involved in
     # faces not on fractures.
-    node_only_on_fracture_faces = np.where(np.logical_and(node_counts > 0, node_counts == node_counts_fracture_faces))[0]
+    node_only_on_fracture_faces = np.where(
+        np.logical_and(node_counts > 0, node_counts == node_counts_fracture_faces)
+    )[0]
 
     # Loop over all nodes only present on fracture faces. Check if all faces of
     # the node belong to the same split fracture.

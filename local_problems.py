@@ -20,6 +20,7 @@ from porepy.fracs import simplex
 from .interaction_region import InteractionRegion
 from .local_grid_bucket import LocalGridBucketSet
 
+
 def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     """
     Transfer the solution from one grid to boundary condition values on a grid of
@@ -195,7 +196,12 @@ def _match_points_on_surface(
     return pairs
 
 
-def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, discr: pp.FVElliptic, macro_data: Dict):
+def cell_basis_functions(
+    reg: InteractionRegion,
+    local_gb: LocalGridBucketSet,
+    discr: pp.FVElliptic,
+    macro_data: Dict,
+):
     """
     Calculate basis function related to coarse cells for an interaction region.
 
@@ -331,7 +337,10 @@ def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, d
                             # where a continuity condition has been imposed (this effectively
                             # will have no boundary condition). In the latter case, it would not
                             # hurt to rediscretize, but it is not necessary.
-                            if not isinstance(loc_discr, pp.numerics.fv.fv_elliptic.EllipticDiscretizationZeroPermeability):
+                            if not isinstance(
+                                loc_discr,
+                                pp.numerics.fv.fv_elliptic.EllipticDiscretizationZeroPermeability,
+                            ):
                                 loc_discr.discretize(g, d)
 
                                 bc = d[pp.PARAMETERS][discr.keyword]["bc"]
@@ -340,7 +349,9 @@ def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, d
                                 breakpoint()
                                 # Reassemble on this gb, and update the assembler map
                                 assembler, _ = assembler_map[gb]
-                                A_new, _ = assembler.assemble_matrix_rhs(only_matrix=True)
+                                A_new, _ = assembler.assemble_matrix_rhs(
+                                    only_matrix=True
+                                )
                                 assembler_map[gb] = (assembler, A_new)
 
                     # Verify that either all values in the previous grid has been used
@@ -374,7 +385,7 @@ def cell_basis_functions(reg: InteractionRegion, local_gb: LocalGridBucketSet, d
                 for e, d in gb.edges():
                     # In some special cases, there are edges with no variables.
                     # Safeguard against this.
-                    if 'state' in d.keys():
+                    if "state" in d.keys():
                         debug_pou_map[e] += d[pp.STATE][discr.mortar_variable]
 
                 # Avoid this operation for the highest dimensional gb - that will be
@@ -825,7 +836,7 @@ def discretize_boundary_conditions(
     for macro_face, surf, edge in surface_edge_pairs:
 
         macro_area = coarse_g.face_areas[macro_face]
-        
+
         # Data structure to store the value for the grid bucket set of a lower dimension
         prev_values = []
 
@@ -891,9 +902,12 @@ def discretize_boundary_conditions(
                             # independent of the direction of the normal vector. Thus the macro
                             # boundary condition are computed with the same convention (which also
                             # is the sign convention for mortar fluxes).
-#                            if g.dim < gb.dim_max():
-#                                breakpoint()
-                            face_areas = g.face_areas[micro_bound_face] * data['aperture'][micro_bound_face]
+                            #                            if g.dim < gb.dim_max():
+                            #                                breakpoint()
+                            face_areas = (
+                                g.face_areas[micro_bound_face]
+                                * data["aperture"][micro_bound_face]
+                            )
                             bc_values[micro_bound_face] = face_areas / macro_area
 
                 # Get assembler
