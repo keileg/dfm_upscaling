@@ -885,10 +885,20 @@ class LocalGridBucketSet:
 
                 elif grid_ind < num_2d_grids + num_1d_grids:
                     # Here we need to adjust the grid index, to account for the
-                    # numbering used in defining the pairs above
-                    g1 += [g_1d_auxiliary[grid_ind - num_2d_grids]]
+                    # numbering used in defining the pairs above.
+                    # Also check that the 1d grid has not been added before (if it was a
+                    # fracture line as well - this is maybe not possible, but better safe than
+                    # sorry).
+                    target_g = g_1d_auxiliary[grid_ind - num_2d_grids]
+                    if not target_g in g1:
+                        g1 += [target_g]
                 else:
-                    g0 += [g_0d_boundary[grid_ind - num_2d_grids - num_1d_grids]]
+                    # Check that the 0d grid has not been added before. This is a real
+                    # possibility, maybe because the tagging of 0d points does not fully
+                    # reflect all possibilities for this kind of grids. Sigh.
+                    target_g = g_0d_boundary[grid_ind - num_2d_grids - num_1d_grids]
+                    if not target_g in g0:
+                        g0 += [target_g]
 
             # Make list, make bucket.
             grid_list = [g2, g1, g0]
