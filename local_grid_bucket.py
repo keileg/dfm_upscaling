@@ -750,7 +750,7 @@ class LocalGridBucketSet:
         g_0d_boundary_map, g_0d_constraint_map = {}, {}
         for g in g_0d_boundary:
             ind = np.where(fracture_boundary_points == g._physical_name_index)[0][0]
-            g_0d_boundary_map[ind] = g
+            g_0d_boundary_map[fracture_boundary_points[ind]] = g
 
         for g in g_0d_constraint:
             g_0d_constraint_map[g.global_point_ind[0]] = g
