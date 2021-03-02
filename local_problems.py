@@ -150,8 +150,7 @@ def _match_points_on_surface(
 
         else:
             # In 3d, we can use a pp function to get the normal vector
-            # We (should) know that the points are on a plane, so no check
-            n = pp.map_geometry.compute_normal(all_surface_points, check=False).reshape(
+            n = pp.map_geometry.compute_normal(all_surface_points).reshape(
                 (-1, 1)
             )
 
