@@ -74,16 +74,16 @@ class InteractionRegion:
 
             # These are random values, use with care.
             mesh_args = {
-                "mesh_size_frac": extent / 1,
+                "mesh_size_frac": extent / 2,
                 "mesh_size_bound": extent / 1,
-                "mesh_size_min": extent / 1,
+                "mesh_size_min": extent / 3,
             }
         if self.dim == 2:
             return self._mesh_2d(mesh_args)
         else:
             return self._mesh_3d(mesh_args)
 
-    def _mesh_2d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
+    def _mesh_2d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d]:
         """To create a local grid bucket in 2d, we should:
         1) Create the bounding surfaces, from self.surfaces
             i) Find coordinates of all surfaces
@@ -312,7 +312,7 @@ class InteractionRegion:
 
         return gb, network_for_meshing
 
-    def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d, str]:
+    def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d]:
 
         # List of surfaces that make up the region boundary
         boundaries: List[np.ndarray] = []
