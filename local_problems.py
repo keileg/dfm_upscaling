@@ -9,7 +9,7 @@ Created on Tue Mar 24 06:56:22 2020
 import numpy as np
 import porepy as pp
 from collections import namedtuple
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 
 
 import scipy.sparse as sps
@@ -835,7 +835,39 @@ def discretize_boundary_conditions(
     # Loop over all macro faces, provide discretization of boundary condition
     for macro_face, surf, edge in surface_edge_pairs:
 
-        macro_area = coarse_g.face_areas[macro_face]
+        # For Neumann faces, the flux through the macro face must be distributed over the
+        # micro faces. If no microscale fractures touch the macro face, the micro face areas
+        # (of what will then be only the highest-dimensional micro grid) should sum to the
+        # macro face area. However, if micro fractures are present, these must be included,
+        # and the macro flux distributed over what will be a larger area. Sum the micro
+        # face areas (accounting for specific volumes ['aperture'] of lower-dimensional grids
+        # for use in the distribution below.
+        # NOTE: The mismatch between macro and summed micro area is a consequence of the
+        # lower-dimensional representation of the grids.
+        if macro_bc.is_neu[macro_face]:
+            macro_area = 0
+            for gb_set in bucket_list:
+                for gb in gb_set:
+                    for g, d in gb:
+                        if hasattr(g, "macro_face_ind"):
+                            # Find those micro faces that form this macro (boundary) face
+                            hit = g.macro_face_ind == macro_face
+                            if not np.any(hit):
+                                continue
+
+                            # Get indices of micro faces on macro boundary
+                            micro_bound_face = g.face_on_macro_bound[hit]
+                            data = d[pp.PARAMETERS][discr.keyword]
+                            # Specific volume should be given as a number per object.
+                            # Extension to one value per face (or cell) is simple, but
+                            # we do not bother with that.
+                            specific_volume: Union[float, int] = data.get(
+                                "specific_volume", 1
+                            )
+
+                            macro_area += (
+                                g.face_areas[micro_bound_face].sum() * specific_volume
+                            )
 
         # Data structure to store the value for the grid bucket set of a lower dimension
         prev_values = []
@@ -902,12 +934,17 @@ def discretize_boundary_conditions(
                             # independent of the direction of the normal vector. Thus the macro
                             # boundary condition are computed with the same convention (which also
                             # is the sign convention for mortar fluxes).
-                            #                            if g.dim < gb.dim_max():
-                            #                                breakpoint()
-                            face_areas = (
-                                g.face_areas[micro_bound_face]
-                                * data["aperture"][micro_bound_face]
+
+                            # The face areas are scaled with the specific volume of the grid,
+                            # as was done when computing the macro area above.
+                            face_areas = g.face_areas[micro_bound_face] * data.get(
+                                "specific_volume", 1
                             )
+                            # NOTE: The scaling with specific volume is only used to
+                            # distribute the boundary condition among the micro faces of
+                            # various dimensions. The fluxes retain the PorePy convention of
+                            # being volume fluxes (no implicit aperture scaling etc), thus
+                            # there is no need for similar compensation in other places.
                             bc_values[micro_bound_face] = face_areas / macro_area
 
                 # Get assembler

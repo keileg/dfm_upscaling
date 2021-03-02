@@ -68,7 +68,7 @@ class FVDFM(pp.FVElliptic):
             param = {"bc": bc}
             perm = data["g_data"](g)["second_order_tensor"]
             param["second_order_tensor"] = perm
-            param["aperture"] = data["g_data"](g)["aperture"]
+            param["specific_volume"] = data["g_data"](g)["specific_volume"]
 
             # Use python inverter for mpfa for small problems, where it does not pay off
             # to fire up numba. The set threshold value is somewhat randomly picked.
