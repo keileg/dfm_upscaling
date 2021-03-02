@@ -858,11 +858,10 @@ class LocalGridBucketSet:
         # Data structure
         surface_buckets: Dict[pp.GridBucket, List[int]] = {}
         # Loop over clusters
+
         for c in clusters:
 
             g2, g1, g0 = [], [], []
-
-            added_0d_ind = []
 
             # Loop over cluster members
             for grid_ind in c:
@@ -879,9 +878,8 @@ class LocalGridBucketSet:
                         # (think an auxiliray line between two surfaces, which is intersected
                         # by a fracture line). These point grids should only be added once to
                         # the list of grids
-                        if g.global_point_ind[0] not in added_0d_ind:
+                        if g not in g0:
                             g0 += [g]
-                            added_0d_ind.append(g.global_point_ind[0])
 
                 elif grid_ind < num_2d_grids + num_1d_grids:
                     # Here we need to adjust the grid index, to account for the
