@@ -529,7 +529,7 @@ def compute_transmissibilies(
             cells,
             phys_names,
             cell_info,
-            line_tag=PhysicalNames.AUXILIARY.value,
+            line_tag=PhysicalNames.AUXILIARY_LINE.value,
         )
         micro_domain_boundary, _ = msh_2_grid.create_1d_grids(
             pts,
@@ -548,7 +548,7 @@ def compute_transmissibilies(
             phys_names,
             cell_info,
             is_embedded=True,
-            surface_tag=PhysicalNames.AUXILIARY.value,
+            surface_tag=PhysicalNames.AUXILIARY_PLANE.value,
         )
         micro_domain_boundary = msh_2_grid.create_2d_grids(
             pts,
