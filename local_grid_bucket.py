@@ -447,9 +447,15 @@ class LocalGridBucketSet:
                 # To get the right grid, first map the midpoint on the ia_edge to the
                 # boundary point, and then access the dictionary of all boundary point
                 # grids
-                edge_grids_0d = [
-                    domain_point_2_g[boundary_point_ind[domain_pt_ia_edge[1]]]
-                ]
+                pt_ind = boundary_point_ind[domain_pt_ia_edge[1]]
+                # The midpoint can be either among the domain or the fracture boundary points
+                if pt_ind in domain_point_2_g:
+                    edge_grids_0d = [domain_point_2_g[pt_ind]]
+                elif pt_ind in frac_bound_point_2_g:
+                    edge_grids_0d = [frac_bound_point_2_g[pt_ind]]
+                else:
+                    raise KeyError("Point on 1d region edge not found among domain or fracture boundary points")
+
             #                breakpoint()
 
             # Data structure for storing point grids along the edge that corresponds to
