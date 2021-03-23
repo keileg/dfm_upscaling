@@ -237,7 +237,7 @@ class InteractionRegion:
         self.domain_edges_2_reg_surface = sort_ind
 
         gmsh_data = network_for_meshing.prepare_for_gmsh(
-            mesh_args=mesh_args, constraints=edge_2_constraint
+            mesh_args=mesh_args, constraints=edge_2_constraint, remove_small_fractures=True
         )
 
         decomp = network_for_meshing._decomposition
