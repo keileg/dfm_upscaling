@@ -345,7 +345,7 @@ def cell_basis_functions(
                                 bc = d[pp.PARAMETERS][discr.keyword]["bc"]
                                 bc.is_dir[faces_found] = True
                                 bc.is_neu[faces_found] = False
-                                breakpoint()
+                                #breakpoint()
                                 # Reassemble on this gb, and update the assembler map
                                 assembler, _ = assembler_map[gb]
                                 A_new, _ = assembler.assemble_matrix_rhs(
