@@ -150,9 +150,7 @@ def _match_points_on_surface(
 
         else:
             # In 3d, we can use a pp function to get the normal vector
-            n = pp.map_geometry.compute_normal(all_surface_points).reshape(
-                (-1, 1)
-            )
+            n = pp.map_geometry.compute_normal(all_surface_points).reshape((-1, 1))
 
         # Index of points in the plane
         assert np.all(np.isfinite(n))
@@ -444,12 +442,12 @@ def cell_basis_functions(
     if check_basis:
         basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
         for g, _ in assembler.gb:
-            dof = assembler.dof_ind(g, discr.cell_variable)
+            dof = assembler._dof_manager.dof_ind(g, discr.cell_variable)
             assert np.allclose(basis_sum[dof], 1)
 
         # Check that the mortar fluxes sum to zero for local problems.
         for e, _ in assembler.gb.edges():
-            dof = assembler.dof_ind(e, discr.mortar_variable)
+            dof = assembler._dof_manager.dof_ind(e, discr.mortar_variable)
             assert np.allclose(basis_sum[dof], 0)
 
     return basis_functions, coarse_assembler, coarse_bc_values, assembler_map
