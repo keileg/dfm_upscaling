@@ -190,7 +190,7 @@ class InteractionRegion:
 
         # Uniquify points on the domain boundary
         unique_domain_pts, _, all_2_unique = pp.utils.setmembership.unique_columns_tol(
-            domain_pts
+            domain_pts, tol=self.network.tol
         )
         unique_domain_edges = all_2_unique[domain_edges]
         # Also sort the boundary points to form a circle
@@ -219,7 +219,7 @@ class InteractionRegion:
                 int_tags[key] = np.hstack(([None], value))
 
         # Similarly uniquify points in constraint description
-        unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts)
+        unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts, tol=self.network.tol)
         unique_int_edges = a2u[int_edges]
 
         # Define a fracture network, using the surface specification as boundary,
@@ -229,6 +229,7 @@ class InteractionRegion:
             domain=unique_domain_pts[: self.dim, sorted_edges[0]],
             pts=unique_int_pts[: self.dim],
             edges=unique_int_edges,
+            tol=self.network.tol
         )
         network_for_meshing.tags = int_tags
         # Store the mapping from the ordering of the domain boundaries, as represented
