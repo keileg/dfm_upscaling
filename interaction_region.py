@@ -219,7 +219,9 @@ class InteractionRegion:
                 int_tags[key] = np.hstack(([None], value))
 
         # Similarly uniquify points in constraint description
-        unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(int_pts, tol=self.network.tol)
+        unique_int_pts, _, a2u = pp.utils.setmembership.unique_columns_tol(
+            int_pts, tol=self.network.tol
+        )
         unique_int_edges = a2u[int_edges]
 
         # Define a fracture network, using the surface specification as boundary,
@@ -229,7 +231,7 @@ class InteractionRegion:
             domain=unique_domain_pts[: self.dim, sorted_edges[0]],
             pts=unique_int_pts[: self.dim],
             edges=unique_int_edges,
-            tol=self.network.tol
+            tol=self.network.tol,
         )
         network_for_meshing.tags = int_tags
         # Store the mapping from the ordering of the domain boundaries, as represented
@@ -237,7 +239,9 @@ class InteractionRegion:
         self.domain_edges_2_reg_surface = sort_ind
 
         gmsh_data = network_for_meshing.prepare_for_gmsh(
-            mesh_args=mesh_args, constraints=edge_2_constraint, remove_small_fractures=True
+            mesh_args=mesh_args,
+            constraints=edge_2_constraint,
+            remove_small_fractures=True,
         )
 
         decomp = network_for_meshing._decomposition
@@ -591,9 +595,7 @@ class InteractionRegion:
         s += f"Region has:\n"
         s += f"{self.edges.shape[0]} 1d edges\n"
         s += f"{self.surfaces.shape[0]} {self.dim - 1}d surfaces\n"
-        s += (
-            f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary\n"
-        )
+        s += f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary\n"
         bb = self.bounding_box()
         s += f"Bounding box: ({bb[0, 0]}, {bb[0, 1]}),"
         s += f"({bb[1, 0]}, {bb[1, 1]}), ({bb[2, 0]}, {bb[2, 1]})"
