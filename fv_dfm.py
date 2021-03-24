@@ -1,6 +1,7 @@
 """
 
 """
+from time import time
 from typing import Dict
 import numpy as np
 import porepy as pp
@@ -115,22 +116,14 @@ class FVDFM(pp.FVElliptic):
 
         for g, d in gb:
             d[pp.PRIMARY_VARIABLES] = {self.cell_variable: {"cells": 1, "faces": 0}}
-            if hasattr(g, "is_auxiliary") and g.is_auxiliary:
-                # This is an auxiliary grid, which should impose no constrictions in its
-                # in-plane direction, and continuity in its out-of-plane direction.
+            if g.dim > 1:
                 d[pp.DISCRETIZATION] = {
-                    self.cell_variable: {self.cell_discr: void_discr}
+                    self.cell_variable: {self.cell_discr: fine_scale_dicsr}
                 }
             else:
-                # This is (part of) a fracture. Use Mpfa or Tpfa depending on the dimension.
-                if g.dim > 1:
-                    d[pp.DISCRETIZATION] = {
-                        self.cell_variable: {self.cell_discr: fine_scale_dicsr}
-                    }
-                else:
-                    d[pp.DISCRETIZATION] = {
-                        self.cell_variable: {self.cell_discr: fine_scale_dicsr_1d}
-                    }
+                d[pp.DISCRETIZATION] = {
+                    self.cell_variable: {self.cell_discr: fine_scale_dicsr_1d}
+                }
 
             d[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
 
@@ -139,19 +132,23 @@ class FVDFM(pp.FVElliptic):
         # discretizations are the same.
         for e, d in gb.edges():
             g1, g2 = gb.nodes_of_edge(e)
-            
+
             # Set the mortar variable.
             # NOTE: This is overriden in the case where the higher-dimensional grid is
             # auxiliary, see below.
             d[pp.PRIMARY_VARIABLES] = {self.mortar_variable: {"cells": 1}}
-            
+
             # The type of lower-dimensional discretization depends on whether this is a
             # (part of a) fracture, or a transition between two line or surface grids.
-            if hasattr(g1, "is_auxiliary") and g1.is_auxiliary:
+            if g1.dim == 2 and g2.dim == 2:
+                mortar_discr = pp.FluxPressureContinuity(
+                    self.keyword, fine_scale_dicsr, fine_scale_dicsr
+                )
+            elif hasattr(g1, "is_auxiliary") and g1.is_auxiliary:
                 if g2.dim > 1:
                     # This is a connection between a surface and an auxiliary line.
                     # Impose continuity conditions over the line.
-                    
+
                     assert g1.dim == 1  # Cannot imagine this is not True
                     mortar_discr = pp.FluxPressureContinuity(
                         self.keyword, fine_scale_dicsr, void_discr
@@ -204,7 +201,11 @@ class FVDFM(pp.FVElliptic):
         micro_network = parameter_dictionary[self.network_keyword]
         num_processes = parameter_dictionary.get("num_processes", 1)
         discr_ig = partial(
-            self._discretize_interaction_region, g, micro_network, parameter_dictionary, local_mesh_args
+            self._discretize_interaction_region,
+            g,
+            micro_network,
+            parameter_dictionary,
+            local_mesh_args,
         )
         if num_processes == 1:
             # run the code in serial, useful also for debug
@@ -309,14 +310,17 @@ class FVDFM(pp.FVElliptic):
     def _discretize_interaction_region(
         self, g, micro_network, parameter_dictionary, local_mesh_args, reg
     ):
+        #        if reg.reg_ind != 17:
+        #            return [], [], [], []
 
+        tic_fv = time()
         # Add the fractures to be upscaled
         self._add_network_to_upscale(reg, micro_network)
 
         # construct the sequence of local grid buckets
         gb_set = LocalGridBucketSet(g.dim, reg)
         gb_set.construct_local_buckets()
-
+        tic = time()
         # First basis functions for local problems
         (
             basis_functions,
@@ -324,7 +328,7 @@ class FVDFM(pp.FVElliptic):
             cc_bc_values,
             full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
         ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
-
+        print(f"finished basis functions {time() - tic}")
         # Call method to transfer basis functions to transmissibilties over coarse
         # edges
         trm_cell = local_problems.compute_transmissibilies(
@@ -340,7 +344,11 @@ class FVDFM(pp.FVElliptic):
 
         matrix_bound_pressure_cell = (
             local_problems.discretize_pressure_trace_macro_bound(
-                g, gb_set, self, cc_assembler, basis_functions
+                g,
+                gb_set,
+                self,
+                cc_assembler,
+                basis_functions,
             )
         )
 
@@ -353,6 +361,7 @@ class FVDFM(pp.FVElliptic):
         # For debugging purposes e have kept the mesh files for this region up to this point
         # but now it should be okay to delete it
         reg.cleanup()
+        print(f"Done with region {reg.reg_ind}. Time: {time() - tic_fv}")
 
         return (
             trm_cell,
