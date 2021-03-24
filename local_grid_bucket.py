@@ -16,6 +16,7 @@ from porepy.utils.setmembership import unique_columns_tol
 from porepy.fracs import msh_2_grid
 from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
+from porepy.grids.mortar_grid import MortarSides
 
 from dfm_upscaling import interaction_region as ia_reg
 
@@ -454,7 +455,9 @@ class LocalGridBucketSet:
                 elif pt_ind in frac_bound_point_2_g:
                     edge_grids_0d = [frac_bound_point_2_g[pt_ind]]
                 else:
-                    raise KeyError("Point on 1d region edge not found among domain or fracture boundary points")
+                    raise KeyError(
+                        "Point on 1d region edge not found among domain or fracture boundary points"
+                    )
 
             #                breakpoint()
 
@@ -773,9 +776,9 @@ class LocalGridBucketSet:
 
         # For all surface grids, find all auxiliary grids with which is share
         # nodes (a surface grid face should coincide with a 1d cell).
-        # This code is borrowed from pp.meshing.grid_list_to_grid_bucket()
-        # It is critical that the operation is carried out before splitting of the
-        # nodes, or else the local-to-global node numbering is not applicable.
+        # Note that the connection of surface grids to auxiliary grids is a temporary
+        # construct, the auxiliary grids will be eliminated from the final version of
+        # the local grid bucket.
 
         # Only look for matches if there are any auxiliary line grids
         if num_1d_grids > 0:
@@ -907,6 +910,63 @@ class LocalGridBucketSet:
             # Make list, make bucket.
             grid_list = [g2, g1, g0]
             gb_loc = pp.meshing.grid_list_to_grid_bucket(grid_list)
+
+            # Now that the grid bucket is assembled, replace the 1d auxiliary lines with
+            # direct couplings between 2d surface grids. This allows us to assign a
+            # full continuity boundary condition between the relevant surface grids.
+            #
+            # Loop over all 1d grids, first remove the auxiliary grids from the GridBucket,
+            # and next add a new edge between the neighboring 2d grids, with a new
+            # MortarGrid.
+            for g in g1:
+
+                if not g.is_auxiliary:
+                    # Disregard fractures that lie in the surface
+                    continue
+
+                # Fetch higher-dimensional neighbors
+                high_neigh = gb_loc.node_neighbors(g, only_higher=True)
+
+                # No idea why this assertion would be broken, but it sure can't be good.
+                assert high_neigh.size == 2
+
+                # There is now one GridBucket between the auxiliary grid and each of the
+                # surface grids. Fetch both the relevant mortar grids.
+                # We need to do this before deleting the old node from the GridBucket,
+                # since this operation will also remove any edges connected to the node.
+                mortar_0 = gb_loc.edge_props((high_neigh[0], g), "mortar_grid")
+                mortar_1 = gb_loc.edge_props((high_neigh[1], g), "mortar_grid")
+
+                # Now we can remove the auxiliary node from the bucket. This will also
+                # remove edges from the 1d auxiliary grids to any connected 0d grids,
+                # formed by the intersection with a fracture.
+                gb_loc.remove_node(g)
+
+                # Define a new edge between the surface grids, but only if it has not
+                # been added before.
+                if not (
+                    (high_neigh[0], high_neigh[1]) in gb_loc._edges.keys()
+                    or (high_neigh[1], high_neigh[0]) in gb_loc._edges.keys()
+                ):
+                    # For the new edge, the primary grid will be the first neighbor.
+                    # The face-cell map (which really is a face-face map) should go
+                    # from the primary to secondary faces.
+                    face_map_0 = mortar_0.mortar_to_primary_int()
+                    face_map_1 = mortar_1.primary_to_mortar_int()
+                    face_face = face_map_0 * face_map_1
+
+                    gb_loc.add_edge(high_neigh.tolist(), face_cells=face_face)
+
+                    # This is the way to make mortars between equi-dimensional grids.
+                    side_grid_map = {
+                        MortarSides.NONE_SIDE: g.copy(),
+                    }
+                    mg = pp.MortarGrid(
+                        g.dim, side_grids=side_grid_map, primary_secondary=face_face
+                    )
+                    # Add the new data.
+                    data = gb_loc.edge_props((high_neigh[0], high_neigh[1]))
+                    data["mortar_grid"] = mg
 
             # The tagging of boundary faces in gb_loc is not to be trusted, since the function
             # which takes care of this (pp.fracs.meshing._tag_faces()) is mainly made for a
