@@ -914,7 +914,10 @@ class LocalGridBucketSet:
             # Now that the grid bucket is assembled, replace the 1d auxiliary lines with
             # direct couplings between 2d surface grids. This allows us to assign a
             # full continuity boundary condition between the relevant surface grids.
-            #
+
+            # Assign node numbering - this is needed for correct modification of the edges.
+            gb_loc.assign_node_ordering()
+
             # Loop over all 1d grids, first remove the auxiliary grids from the GridBucket,
             # and next add a new edge between the neighboring 2d grids, with a new
             # MortarGrid.
@@ -948,12 +951,18 @@ class LocalGridBucketSet:
                     (high_neigh[0], high_neigh[1]) in gb_loc._edges.keys()
                     or (high_neigh[1], high_neigh[0]) in gb_loc._edges.keys()
                 ):
-                    # For the new edge, the primary grid will be the first neighbor.
-                    # The face-cell map (which really is a face-face map) should go
-                    # from the primary to secondary faces.
+                    # For the assembler, what is the primary and secondary grids of an
+                    # edge is decided according to the node numbers in the GridBucket.
+                    # The mapping between the mortar grid and the two nodes must be set
+                    # accordingly. The below code seems to do this in a correct way.
                     face_map_0 = mortar_0.mortar_to_primary_int()
                     face_map_1 = mortar_1.primary_to_mortar_int()
                     face_face = face_map_0 * face_map_1
+                    if gb_loc.node_props(
+                        high_neigh[0], "node_number"
+                    ) > gb_loc.node_props(high_neigh[1], "node_number"):
+                        # Flip the primary and secondary if necessary
+                        face_face = face_face.transpose()
 
                     gb_loc.add_edge(high_neigh.tolist(), face_cells=face_face)
 
