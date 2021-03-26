@@ -1249,7 +1249,11 @@ class LocalGridBucketSet:
                         micro_vec = micro_vec.reshape((-1, 1))
 
                     # Create macro vectors
-                    macro_face_ind = surf[node_type.index("face")]
+                    if reg.name == "mpfa":
+                        macro_face_ind = surf[node_type.index("face")]
+                    elif reg.name == "tpfa":
+                        macro_face_ind = reg.reg_ind
+
                     macro_cell_ind = macro_cf[macro_face_ind].indices[0]
                     macro_vec = (
                         macro_g.face_centers[:, macro_face_ind]
