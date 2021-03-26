@@ -251,13 +251,19 @@ def cell_basis_functions(
     # of unity for the boundary problems in addition to the main check for the basis
     # functions.
     debug_pou_map = {}
+    debug_bc_val_map = {}
     for gb_set in bucket_list:
         for gb in gb_set:
             for g, _ in gb:
                 debug_pou_map[g] = np.zeros(g.num_cells)
+                debug_bc_val_map[g] = np.zeros(g.num_faces)
             for e, d in gb.edges():
                 mg = d["mortar_grid"]
                 debug_pou_map[e] = np.zeros(mg.num_cells)
+
+    # Make lists of all 1d and 2d grids. Useful for debugging.
+    g1 = [g for g in debug_pou_map if isinstance(g, pp.Grid) and g.dim == 1]
+    g2 = [g for g in debug_pou_map if isinstance(g, pp.Grid) and g.dim == 2]
 
     # There is one basis function per coarse degree of freedom
     for coarse_ind, coarse_cc in zip(coarse_cell_ind, coarse_cell_cc.T):
@@ -343,7 +349,7 @@ def cell_basis_functions(
                                 bc = d[pp.PARAMETERS][discr.keyword]["bc"]
                                 bc.is_dir[faces_found] = True
                                 bc.is_neu[faces_found] = False
-                                #breakpoint()
+                                # breakpoint()
                                 # Reassemble on this gb, and update the assembler map
                                 assembler, _ = assembler_map[gb]
                                 A_new, _ = assembler.assemble_matrix_rhs(
@@ -363,6 +369,9 @@ def cell_basis_functions(
                         # lower-dimensional problem. The solution will not be trivial
                         trivial_solution = False
 
+                for g, d in gb:
+                    debug_bc_val_map[g] += d[pp.PARAMETERS][discr.keyword]["bc_values"]
+
                 # Get assembler
                 assembler, A = assembler_map[gb]
 
@@ -379,6 +388,7 @@ def cell_basis_functions(
 
                 for g, d in gb:
                     debug_pou_map[g] += d[pp.STATE][discr.cell_variable]
+
                 for e, d in gb.edges():
                     # In some special cases, there are edges with no variables.
                     # Safeguard against this.
