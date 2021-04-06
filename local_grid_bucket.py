@@ -1214,7 +1214,6 @@ class LocalGridBucketSet:
 
             # Get coordinates of the surface points. There will be reg.dim points
             pts = reg.coords(surf, node_type)
-
             # Loop over all grids in the main gb, and look for faces on the surface.
             for g, _ in gb:
                 # Grids of co-dimension > 1 will not be assigned a bc on the macro
@@ -1240,7 +1239,8 @@ class LocalGridBucketSet:
                     # surface), we need to filter away half the micro faces.
                     # Do this by finding cell centers of micro and macro cells, create
                     # vectors from cell to face centers, and pick micro faces with vectors
-                    # that point in the same direction as the macro vector.
+                    # that point in the same direction as the macro vector, relative to the
+                    # normal vector of the macro face.
 
                     # Create micro vectors
                     micro_cell_ind = g.cell_faces.tocsr()[on_bound].indices
@@ -1260,9 +1260,17 @@ class LocalGridBucketSet:
                         - macro_g.cell_centers[:, macro_cell_ind]
                     ).reshape((-1, 1))
 
+                    # Normal vector of macro face
+                    macro_normal = macro_g.face_normals[:, macro_face_ind].reshape(
+                        (-1, 1)
+                    )
+                    # Direction of vectors relative to the macro face.
+                    sgn_macro = np.sum(macro_vec * macro_normal, axis=0) > 0
+                    sgn_micro = np.sum(micro_vec * macro_normal, axis=0) > 0
+
                     # Identify micro vectors that point in the same direction as the
                     # macro vector.
-                    same_side = np.sum(macro_vec * micro_vec, axis=0) > 0
+                    same_side = sgn_macro == sgn_micro
 
                     # Append the micro faces to the list of found indices
                     micro_map[g] = np.hstack((micro_map[g], on_bound[same_side]))
