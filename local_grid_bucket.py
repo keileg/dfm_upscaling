@@ -420,10 +420,76 @@ class LocalGridBucketSet:
 
             # All ia_edge vertexes should be found among the boundary points
             if len(domain_pt_ia_edge) != num_ia_edge_vertexes:
-                raise ValueError(
-                    """Could not match domain boundary points with edges in
-                                 interaction region"""
+                # If a fracture intersects a corner of the interaction region, the
+                # resulting vertex will be tagged as a fracture boundary point, rather
+                # than a domain boundary point, and thus not be available for the point
+                # matching.
+                # To check if this is the case, and fix it, do an extended matching with
+                # both fracture and domain points, and see if this helps. There will likely
+                # be cases with very close points where this may turn into an issue, but
+                # we will cross that brigde when it comes.
+
+                # Coordinates of all fracture points. The order is taken relative to the
+                # fracture boundary points.
+                fracture_boundary_point_coord = np.hstack(
+                    [g.cell_centers.reshape((-1, 1)) for g in g_0d_frac_bound]
                 )
+                # Construct extended point array, and look for matches.
+                pts_extended = np.hstack(
+                    (boundary_point_coord, fracture_boundary_point_coord)
+                )
+                domain_pt_ia_edge_extended = self._match_points(
+                    ia_edge_coord, pts_extended
+                )
+
+                # If the extended array has a sufficient number of points, the relevant
+                # fracture point(s?) should be reclassified into a domain boundary point.
+                # Note that we do not change the from_fracture attribute from the grid,
+                # thus the point grid may still be assigned fracture-relevant properties.
+                if len(domain_pt_ia_edge_extended) == num_ia_edge_vertexes:
+
+                    num_bp = boundary_point_coord.shape[1]
+                    # Look for matches in the part of the extended array made of fracture
+                    # points.
+                    to_move = np.where(np.array(domain_pt_ia_edge_extended) >= num_bp)[
+                        0
+                    ]
+
+                    # Loop over all points to move.
+                    for counter, move_ind in enumerate(to_move):
+                        # Get the relevant grid
+                        g = g_0d_frac_bound[
+                            domain_pt_ia_edge_extended[move_ind] - num_bp
+                        ]
+                        # Add the coordinate to the boundary points coordinates and indices.
+                        boundary_point_coord = np.hstack(
+                            [boundary_point_coord, g.cell_centers.reshape((-1, 1))]
+                        )
+                        boundary_point_ind = np.hstack(
+                            (boundary_point_ind, g._physical_name_index)
+                        )
+                        # Reclassify the point in the network decomposition
+                        decomp["domain_boundary_points"] = np.hstack(
+                            [decomp["domain_boundary_points"], g._physical_name_index]
+                        )
+
+                        # Remove grid from list and dictionary of fracture 0d points
+                        g_0d_frac_bound.remove(g)
+                        frac_bound_point_2_g.pop(g._physical_name_index)
+                        # Add grid to domain boundary grids
+                        domain_point_2_g[g._physical_name_index] = g
+
+                    # Redo the matching of the point coordinates.
+                    domain_pt_ia_edge = self._match_points(
+                        ia_edge_coord, boundary_point_coord
+                    )
+                else:
+                    # If the extended array fails to give a sufficient number of matches,
+                    # something is indeed wrong.
+                    raise ValueError(
+                        """Could not match domain boundary points with edges in
+                                 interaction region"""
+                    )
 
             # Express the ia_reg edge in terms of indices in the decomposition of the
             # network
