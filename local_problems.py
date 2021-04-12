@@ -58,7 +58,7 @@ def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
 
 
 def _match_points_on_surface(
-    sp, p, spatial_dim, dim_of_sp, supporting_points, tol=1e-10
+    sp, p, spatial_dim, dim_of_sp, supporting_points, tol=1e-8
 ):
     """
     Match points in two point sets by coordinates. One of the point sets is assumed to
