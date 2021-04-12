@@ -74,9 +74,9 @@ class InteractionRegion:
 
             # These are random values, use with care.
             mesh_args = {
-                "mesh_size_frac": extent / 2,
+                "mesh_size_frac": extent / 3,
                 "mesh_size_bound": extent / 1,
-                "mesh_size_min": extent / 3,
+                "mesh_size_min": extent / 5,
             }
         if self.dim == 2:
             return self._mesh_2d(mesh_args)
@@ -405,7 +405,9 @@ class InteractionRegion:
             + np.arange(len(constraints))
         )
         network = pp.FractureNetwork3d(polygons)
-        ind_map = network.impose_external_boundary(boundaries)
+        # Impose the boundary on the fracture network.
+        # The area threshold is assigned to avoid very small fractures.
+        ind_map = network.impose_external_boundary(boundaries, area_threshold=1e-2)
 
         updated_constraint_inds = []
         for ci in constraint_inds:
