@@ -408,8 +408,8 @@ class InteractionRegion:
         # Impose the boundary on the fracture network.
         # The area threshold is assigned to avoid very small fractures.
         ind_map = network.impose_external_boundary(boundaries, area_threshold=1e-2)
-
         updated_constraint_inds = []
+
         for ci in constraint_inds:
             ui = np.where(ind_map == ci)[0]
             assert ui.size == 1
@@ -446,6 +446,20 @@ class InteractionRegion:
                     gb.remove_node(neigh)
                 # .. and delete the 2d grid.
                 gb.remove_node(rem)
+
+        # For 2d grids, make frac_num point to the fracture index in the global list
+        # of fractures.
+        # Counter for the list of 2d grids in gb
+        counter = 0
+        for ind in range(ind_map.size):
+            if ind in updated_constraint_inds:
+                # Constraints do not have grids assigned.
+                continue
+
+            # Fracture index, adjust for macro fratures.
+            frac_ind = ind_map[ind] - self.num_macro_frac_faces
+            gb.grids_of_dimension(2)[counter].frac_num = frac_ind
+            counter += 1
 
         return gb, network
 
