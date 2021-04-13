@@ -659,18 +659,29 @@ def compute_transmissibilies(
                     _, indices = np.unique(loc_g.cell_faces.indices, return_index=True)
                     sign = sps.diags(loc_g.cell_faces.data[indices], 0)
 
-                    for _, d_e in gb.edges_of_node(loc_g):
-                        g_m = d_e["mortar_grid"]
+                    for e, d_e in gb.edges_of_node(loc_g):
+                        mg = d_e["mortar_grid"]
                         # Consider only the higher dimensional case
-                        if g_m.dim == loc_g.dim:
+                        if mg.dim == loc_g.dim:
                             continue
-                        # Project the mortar variable back to the higher dimensional
-                        # problem
-                        edge_flux += (
-                            sign
-                            * g_m.primary_to_mortar_avg().T
-                            * d_e[pp.STATE]["mortar_flux"]
-                        )
+
+                        # Get hold of projection operator
+                        if e[0].dim == e[1].dim:
+                            # For grids of equal dimension, care is needed to get the
+                            # right projection matrix.
+                            if e[0] == loc_g:
+                                proj = mg.mortar_to_secondary_int()
+                            elif e[1] == loc_g:
+                                proj = mg.mortar_to_primary_int()
+                            else:
+                                raise ValueError(
+                                    "cannot match mortar projection with number of faces"
+                                )
+                        else:
+                            # The primary grid is of higher dimension
+                            proj = mg.mortar_to_primary_int()
+
+                        edge_flux += sign * proj * d_e[pp.STATE]["mortar_flux"]
 
                 # Construct the full flux
                 full_flux = grid_flux + edge_flux
