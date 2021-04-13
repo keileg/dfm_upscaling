@@ -122,6 +122,14 @@ class LocalGridBucketSet:
             if g.dim < self.dim:
                 g.from_fracture = True
 
+        # eliminate 1d grids that split 2d grids coming from the same global fracture.
+        # This removes grids introduced by the splitting of non-convex fractures.
+        for g in gb.grids_of_dimension(1):
+            neighs = gb.node_neighbors(g, only_higher=True)
+            frac_num = np.array([h.frac_num for h in neighs])
+            if np.unique(frac_num).size == 1:
+                self._eliminate_1d_grid_from_gb(g, gb)
+
         self.gb = gb
         self.network = network
         network._decomposition = network.decomposition
@@ -993,55 +1001,7 @@ class LocalGridBucketSet:
                     # Disregard fractures that lie in the surface
                     continue
 
-                # Fetch higher-dimensional neighbors
-                high_neigh = gb_loc.node_neighbors(g, only_higher=True)
-
-                # No idea why this assertion would be broken, but it sure can't be good.
-                assert high_neigh.size == 2
-
-                # There is now one GridBucket between the auxiliary grid and each of the
-                # surface grids. Fetch both the relevant mortar grids.
-                # We need to do this before deleting the old node from the GridBucket,
-                # since this operation will also remove any edges connected to the node.
-                mortar_0 = gb_loc.edge_props((high_neigh[0], g), "mortar_grid")
-                mortar_1 = gb_loc.edge_props((high_neigh[1], g), "mortar_grid")
-
-                # Now we can remove the auxiliary node from the bucket. This will also
-                # remove edges from the 1d auxiliary grids to any connected 0d grids,
-                # formed by the intersection with a fracture.
-                gb_loc.remove_node(g)
-
-                # Define a new edge between the surface grids, but only if it has not
-                # been added before.
-                if not (
-                    (high_neigh[0], high_neigh[1]) in gb_loc._edges.keys()
-                    or (high_neigh[1], high_neigh[0]) in gb_loc._edges.keys()
-                ):
-                    # For the assembler, what is the primary and secondary grids of an
-                    # edge is decided according to the node numbers in the GridBucket.
-                    # The mapping between the mortar grid and the two nodes must be set
-                    # accordingly. The below code seems to do this in a correct way.
-                    face_map_0 = mortar_0.mortar_to_primary_int()
-                    face_map_1 = mortar_1.primary_to_mortar_int()
-                    face_face = face_map_0 * face_map_1
-                    if gb_loc.node_props(
-                        high_neigh[0], "node_number"
-                    ) > gb_loc.node_props(high_neigh[1], "node_number"):
-                        # Flip the primary and secondary if necessary
-                        face_face = face_face.transpose()
-
-                    gb_loc.add_edge(high_neigh.tolist(), face_cells=face_face)
-
-                    # This is the way to make mortars between equi-dimensional grids.
-                    side_grid_map = {
-                        MortarSides.NONE_SIDE: g.copy(),
-                    }
-                    mg = pp.MortarGrid(
-                        g.dim, side_grids=side_grid_map, primary_secondary=face_face
-                    )
-                    # Add the new data.
-                    data = gb_loc.edge_props((high_neigh[0], high_neigh[1]))
-                    data["mortar_grid"] = mg
+                self._eliminate_1d_grid_from_gb(g, gb_loc)
 
             # The tagging of boundary faces in gb_loc is not to be trusted, since the function
             # which takes care of this (pp.fracs.meshing._tag_faces()) is mainly made for a
@@ -1434,6 +1394,57 @@ class LocalGridBucketSet:
         )
         # In triangle if both in the plane and inside
         return np.where(np.logical_and(inside, in_plane))[0]
+
+    def _eliminate_1d_grid_from_gb(self, g, gb):
+        # Fetch higher-dimensional neighbors
+        high_neigh = gb.node_neighbors(g, only_higher=True)
+
+        # No idea why this assertion would be broken, but it sure can't be good.
+        assert high_neigh.size == 2
+
+        # There is now one GridBucket between the auxiliary grid and each of the
+        # surface grids. Fetch both the relevant mortar grids.
+        # We need to do this before deleting the old node from the GridBucket,
+        # since this operation will also remove any edges connected to the node.
+        mortar_0 = gb.edge_props((high_neigh[0], g), "mortar_grid")
+        mortar_1 = gb.edge_props((high_neigh[1], g), "mortar_grid")
+
+        # Now we can remove the auxiliary node from the bucket. This will also
+        # remove edges from the 1d auxiliary grids to any connected 0d grids,
+        # formed by the intersection with a fracture.
+        gb.remove_node(g)
+
+        # Define a new edge between the surface grids, but only if it has not
+        # been added before.
+        if not (
+            (high_neigh[0], high_neigh[1]) in gb._edges.keys()
+            or (high_neigh[1], high_neigh[0]) in gb._edges.keys()
+        ):
+            # For the assembler, what is the primary and secondary grids of an
+            # edge is decided according to the node numbers in the GridBucket.
+            # The mapping between the mortar grid and the two nodes must be set
+            # accordingly. The below code seems to do this in a correct way.
+            face_map_0 = mortar_0.mortar_to_primary_int()
+            face_map_1 = mortar_1.primary_to_mortar_int()
+            face_face = face_map_0 * face_map_1
+            if gb.node_props(high_neigh[0], "node_number") > gb.node_props(
+                high_neigh[1], "node_number"
+            ):
+                # Flip the primary and secondary if necessary
+                face_face = face_face.transpose()
+
+            gb.add_edge(high_neigh.tolist(), face_cells=face_face)
+
+            # This is the way to make mortars between equi-dimensional grids.
+            side_grid_map = {
+                MortarSides.NONE_SIDE: g.copy(),
+            }
+            mg = pp.MortarGrid(
+                g.dim, side_grids=side_grid_map, primary_secondary=face_face
+            )
+            # Add the new data.
+            data = gb.edge_props((high_neigh[0], high_neigh[1]))
+            data["mortar_grid"] = mg
 
     def __repr__(self) -> str:
         s = (
