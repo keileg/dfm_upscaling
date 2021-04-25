@@ -619,19 +619,36 @@ class InteractionRegion:
                 Path.unlink(file)
 
     def __str__(self) -> str:
-        s = f"Interaction region of type {self.name}\n"
+        s = f"Interaction region of type {self.name} for a {self.dim}-dimensional grid.\n"
         if self.name == "tpfa":
             s += f"Central face: {self.reg_ind}\n"
         elif self.name == "mpfa":
             s += f"Central node: {self.reg_ind}\n"
 
+        ci = []
+        fi = []
+        for (surf, node_type) in zip(self.surfaces, self.surface_node_type):
+            for si, nt in zip(surf, node_type):
+                if nt == "cell":
+                    ci.append(si)
+                elif nt == "face":
+                    fi.append(si)
+
+        s += f"Region involves {len(set(ci))} macro cells and {len(set(fi))} macro faces.\n"
+
         s += f"Region has:\n"
         s += f"{self.edges.shape[0]} 1d edges\n"
         s += f"{self.surfaces.shape[0]} {self.dim - 1}d surfaces\n"
         s += f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary\n"
+
+        s += f"Region has {len(self.constraints)} internal constraints at macro faces\n"
+
         bb = self.bounding_box()
-        s += f"Bounding box: ({bb[0, 0]}, {bb[0, 1]}),"
-        s += f"({bb[1, 0]}, {bb[1, 1]}), ({bb[2, 0]}, {bb[2, 1]})"
+        s += f"Min and max coordinates:\n"
+        s += f"x: ({bb[0, 0]}, {bb[0, 1]})\n"
+        s += f"y: ({bb[1, 0]}, {bb[1, 1]})\n"
+        if self.dim == 3:
+            s += f"x: ({bb[2, 0]}, {bb[2, 1]})\n"
 
         return s
 
