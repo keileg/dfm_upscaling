@@ -99,6 +99,9 @@ class InteractionRegion:
         # Empty value for frac_edge - this will be filled in if relevant.
         frac_edge = np.zeros((3, 0))
 
+        # Tag the region surfaces as (macro) fracture or not
+        surface_is_fracture: List[bool] = []
+
         for surf_ind, (surf, node_type) in enumerate(
             zip(self.surfaces, self.surface_node_type)
         ):
@@ -145,6 +148,9 @@ class InteractionRegion:
                             self.is_tip = True
                             # Store the coordinate of the macro fracture.
                             frac_edge = self.coords(surf, node_type)
+                            # Store this as fracture surface
+                            surface_is_fracture.append(True)
+
                             # No need to do more for this surface
                             continue
                         else:
@@ -160,6 +166,9 @@ class InteractionRegion:
 
             # Then add new points
             domain_pts = np.hstack((domain_pts, self.coords(surf, node_type)))
+
+            # This is not a fracture surface
+            surface_is_fracture.append(False)
 
             edge_2_surf = np.hstack((edge_2_surf, surf_ind + np.ones(e.shape[1])))
 
@@ -197,6 +206,18 @@ class InteractionRegion:
         sorted_edges, sort_ind = pp.utils.sort_points.sort_point_pairs(
             unique_domain_edges
         )
+        # Store the mapping from the ordering of the domain boundaries, as represented
+        # in the FractureNetwork, to the ordering of surfaces in this region.
+        # The mapping must be adjusted to ignore surfaces that are macro fractures
+        incr_sort_ind = sort_ind
+        for i in np.where(surface_is_fracture)[0]:
+            hit = incr_sort_ind >= i
+            incr_sort_ind[hit] += 1
+
+        self.domain_edges_2_reg_surface = incr_sort_ind
+
+        # Store boolean of which surfaces are macro fractures.
+        self.surface_is_macro_fracture: List[bool] = surface_is_fracture
 
         constraint_edges += self.network.pts.shape[1]
 
@@ -234,10 +255,6 @@ class InteractionRegion:
             tol=self.network.tol,
         )
         network_for_meshing.tags = int_tags
-        # Store the mapping from the ordering of the domain boundaries, as represented
-        # in the FractureNetwork, to the ordering of surfaces in this region.
-        self.domain_edges_2_reg_surface = sort_ind
-
         gmsh_data = network_for_meshing.prepare_for_gmsh(
             mesh_args=mesh_args,
             constraints=edge_2_constraint,
