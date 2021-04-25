@@ -546,6 +546,25 @@ def compute_transmissibilies(
             cell_info,
             line_tag=PhysicalNames.DOMAIN_BOUNDARY_LINE.value,
         )
+        if reg.is_tip:
+            # At tips of macro fractures, we should also process transmissibilities
+            # for the macro fracture (which was temporarily degraded to a micro fracture
+            # in the meshing, see interaction_region).
+            # First recover all fracture grids - this will have some overhead, but it
+            # should not be too bad.
+            fracture_domain_boundary, _ = msh_2_grid.create_1d_grids(
+                pts,
+                cells,
+                phys_names,
+                cell_info,
+                line_tag=PhysicalNames.FRACTURE.value,
+            )
+            # We know by construction in interaction region that the macro fracture
+            # was put first in the list of micro fractures. Pick out all grid with
+            # that frac_num - that should take care of split fractures as well.
+            macro_fracture_boundary = [
+                g for g in fracture_domain_boundary if g.frac_num == 0
+            ]
 
     else:
         # EK: 3d domains have not been tested.
@@ -614,6 +633,18 @@ def compute_transmissibilies(
             cfi = reg.reg_ind
 
         surfaces.append(Surface(cfi, cc, nc, gs.dim))
+
+    if reg.dim == 2 and reg.is_tip:
+        # Also add surfaces for the fracture boundary.
+        for gs in macro_fracture_boundary:
+            gs.compute_geometry()
+            breakpoint()
+            for fi in np.where(reg.surface_is_macro_fracture)[0]:
+                cfi = reg.surfaces[fi][reg.surface_node_type[fi].index("face")]
+                surfaces.append(Surface(cfi, gs.cell_centers, gs.nodes, gs.dim))
+    elif reg.dim == 3:
+        # FIXME: Need to do a similar fix in 3d.
+        pass
 
     # Loop over all created surface grids,
     for gs in surfaces:
@@ -686,41 +717,52 @@ def compute_transmissibilies(
                 # Construct the full flux
                 full_flux = grid_flux + edge_flux
 
-                if loc_g.dim == gs.dim + 1:
-                    # find faces in the matrix grid on the surface
-                    grid_map = _match_points_on_surface(
-                        cc, loc_g.face_centers, coarse_grid.dim, gs.dim, nc
-                    )
-                elif loc_g.dim == gs.dim:
-                    # find fractures that intersect with the surface
-                    # If we get an error message from this call, about more than one
-                    # hit in the second argument (p), chances are that a fracture is
-                    # intersecting at the auxiliary surface
-
-                    grid_map = _match_points_on_surface(
-                        nc, loc_g.face_centers, coarse_grid.dim, gs.dim, cc
-                    )
+                # Identify micro faces that form part of the macro fracture.
+                if coarse_grid.tags["fracture_faces"][cfi]:
+                    # If this is a macro fracture, we already have the mapping between
+                    # micro and macro faces.
+                    # Note that using the alternative matching (the below 'else') will
+                    # fail at macro fracture tips, where micro faces at both sides of the
+                    # macro face will give a hit.
+                    hit = loc_g.macro_face_ind == cfi
+                    micro_faces: np.ndarray = loc_g.face_on_macro_bound[hit]
                 else:
-                    grid_map = []
+                    if loc_g.dim == gs.dim + 1:
+                        # find faces in the matrix grid on the surface
+                        grid_map = _match_points_on_surface(
+                            cc, loc_g.face_centers, coarse_grid.dim, gs.dim, nc
+                        )
+                    elif loc_g.dim == gs.dim:
+                        # find fractures that intersect with the surface
+                        # If we get an error message from this call, about more than one
+                        # hit in the second argument (p), chances are that a fracture is
+                        # intersecting at the auxiliary surface
+
+                        grid_map = _match_points_on_surface(
+                            nc, loc_g.face_centers, coarse_grid.dim, gs.dim, cc
+                        )
+                    else:
+                        grid_map = []
+
+                    micro_faces = np.array([i[1] for i in grid_map])
 
                 # If we found any matches, loop over all micro faces, sum the fluxes,
                 # possibly with an adjustment of the flux direction.
-                if len(grid_map) > 0:
-                    surface_flux = []
-                    for fi in grid_map:
-                        loc_flux = full_flux[fi[1]]
+                surface_flux = []
+                for fi in micro_faces:
+                    loc_flux = full_flux[fi]
 
-                        # If the micro and macro normal vectors point in different
-                        # directions, we should switch the flux
-                        fine_normal = loc_g.face_normals[:, fi[1]]
-                        sgn = np.sign(fine_normal.dot(coarse_normal))
-                        surface_flux.append(loc_flux * sgn)
+                    # If the micro and macro normal vectors point in different
+                    # directions, we should switch the flux
+                    fine_normal = loc_g.face_normals[:, fi]
+                    sgn = np.sign(fine_normal.dot(coarse_normal))
+                    surface_flux.append(loc_flux * sgn)
 
-                    # Store the macro cell and face index, together with the
-                    # transmissibility
-                    coarse_cell_ind.append(cci)
-                    coarse_face_ind.append(cfi)
-                    trm.append(np.asarray(surface_flux).sum())
+                # Store the macro cell and face index, together with the
+                # transmissibility
+                coarse_cell_ind.append(cci)
+                coarse_face_ind.append(cfi)
+                trm.append(np.asarray(surface_flux).sum())
 
     check_trm = sanity_check
     for bi in reg.macro_boundary_faces():
