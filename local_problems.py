@@ -727,6 +727,10 @@ def compute_transmissibilies(
                     # Note that using the alternative matching (the below 'else') will
                     # fail at macro fracture tips, where micro faces at both sides of the
                     # macro face will give a hit.
+                    if not hasattr(g, "face_on_macro_bound"):
+                        # If no faces on the macro boundary, we can continue.
+                        continue
+
                     hit = loc_g.macro_face_ind == cfi
                     micro_faces: np.ndarray = loc_g.face_on_macro_bound[hit]
 
