@@ -907,6 +907,10 @@ def discretize_boundary_conditions(
     # Loop over all macro faces, provide discretization of boundary condition
     for macro_face, surf, edge in surface_edge_pairs:
 
+        # Number of nodes of the macro fracture - needed to get the right scaling of
+        # Neumann boundary conditions.
+        num_nodes_of_macro_face = coarse_g.face_nodes[:, macro_face].data.size
+
         # For Neumann faces, the flux through the macro face must be distributed over the
         # micro faces. If no microscale fractures touch the macro face, the micro face areas
         # (of what will then be only the highest-dimensional micro grid) should sum to the
@@ -916,10 +920,14 @@ def discretize_boundary_conditions(
         # for use in the distribution below.
         # NOTE: The mismatch between macro and summed micro area is a consequence of the
         # lower-dimensional representation of the grids.
+        # NOTE: Use separate macro areas for each gb (essentially each dimension in the
+        # cascade of local problems), to spread a unit flux over the right area.
+        macro_area: Dict[pp.GridBucket, float] = {}
+
         if macro_bc.is_neu[macro_face]:
-            macro_area = 0
             for gb_set in bucket_list:
                 for gb in gb_set:
+                    macro_area[gb] = 0
                     for g, d in gb:
                         if hasattr(g, "macro_face_ind"):
                             # Find those micro faces that form this macro (boundary) face
@@ -937,7 +945,7 @@ def discretize_boundary_conditions(
                                 "specific_volume", 1
                             )
 
-                            macro_area += (
+                            macro_area[gb] += (
                                 g.face_areas[micro_bound_face].sum() * specific_volume
                             )
 
@@ -1006,6 +1014,9 @@ def discretize_boundary_conditions(
                             # independent of the direction of the normal vector. Thus the macro
                             # boundary condition are computed with the same convention (which also
                             # is the sign convention for mortar fluxes).
+                            # NOTE: The boundary transmissibility at the Neumann face still
+                            # must be adjusted to account for possible sign changes due to the
+                            # divergence of that face. This is taken care of in fv_dfm.py.
 
                             # The face areas are scaled with the specific volume of the grid,
                             # as was done when computing the macro area above.
@@ -1017,7 +1028,11 @@ def discretize_boundary_conditions(
                             # various dimensions. The fluxes retain the PorePy convention of
                             # being volume fluxes (no implicit aperture scaling etc), thus
                             # there is no need for similar compensation in other places.
-                            bc_values[micro_bound_face] = face_areas / macro_area
+                            bc_values[micro_bound_face] = (
+                                1
+                                * face_areas
+                                / (macro_area[gb] * num_nodes_of_macro_face)
+                            )
 
                 # Get assembler
                 assembler, A = assembler_map[gb]
