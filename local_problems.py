@@ -638,13 +638,14 @@ def compute_transmissibilies(
         # Also add surfaces for the fracture boundary.
         for gs in macro_fracture_boundary:
             gs.compute_geometry()
-            breakpoint()
             for fi in np.where(reg.surface_is_macro_fracture)[0]:
                 cfi = reg.surfaces[fi][reg.surface_node_type[fi].index("face")]
                 surfaces.append(Surface(cfi, gs.cell_centers, gs.nodes, gs.dim))
     elif reg.dim == 3:
         # FIXME: Need to do a similar fix in 3d.
         pass
+
+    macro_div = pp.fvutils.scalar_divergence(coarse_grid)
 
     # Loop over all created surface grids,
     for gs in surfaces:
@@ -653,6 +654,8 @@ def compute_transmissibilies(
         cc = gs.cell_centers
         nc = gs.nodes
         cfi = gs.coarse_face_index
+
+        macro_sgn = macro_div[:, cfi].sum()
 
         # Macro normal vector of the face
         coarse_normal = coarse_grid.face_normals[:, cfi]
@@ -726,7 +729,11 @@ def compute_transmissibilies(
                     # macro face will give a hit.
                     hit = loc_g.macro_face_ind == cfi
                     micro_faces: np.ndarray = loc_g.face_on_macro_bound[hit]
+
+                    fracture_face = True
+                    micro_div = pp.fvutils.scalar_divergence(loc_g)
                 else:
+                    fracture_face = False
                     if loc_g.dim == gs.dim + 1:
                         # find faces in the matrix grid on the surface
                         grid_map = _match_points_on_surface(
@@ -754,8 +761,13 @@ def compute_transmissibilies(
 
                     # If the micro and macro normal vectors point in different
                     # directions, we should switch the flux
-                    fine_normal = loc_g.face_normals[:, fi]
-                    sgn = np.sign(fine_normal.dot(coarse_normal))
+                    # As with the identification of correct micro faces, fracture faces
+                    # need special treatment.
+                    if fracture_face:
+                        sgn = micro_div[:, fi].sum()
+                    else:
+                        fine_normal = loc_g.face_normals[:, fi]
+                        sgn = np.sign(fine_normal.dot(coarse_normal))
                     surface_flux.append(loc_flux * sgn)
 
                 # Store the macro cell and face index, together with the
