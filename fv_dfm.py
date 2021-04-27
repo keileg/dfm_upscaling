@@ -80,13 +80,11 @@ class FVDFM(pp.FVElliptic):
 
         for e, d in gb.edges():
             mg = d["mortar_grid"]
-
             g1, g2 = gb.nodes_of_edge(e)
-
             param = {}
-
             if not hasattr(g1, "is_auxiliary") or not g1.is_auxiliary:
-                param["normal_diffusivity"] = 1e2
+                check_P = mg.secondary_to_mortar_avg()
+                param.update(data["e_data"](mg, g1, g2, check_P))
 
             pp.initialize_data(mg, d, self.keyword, param)
 
@@ -319,7 +317,7 @@ class FVDFM(pp.FVElliptic):
 
         # construct the sequence of local grid buckets
         gb_set = LocalGridBucketSet(g.dim, reg)
-        gb_set.construct_local_buckets()
+        gb_set.construct_local_buckets(local_mesh_args)
         tic = time()
         # First basis functions for local problems
         (
