@@ -453,7 +453,7 @@ def cell_basis_functions(
         basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
         for g, _ in assembler.gb:
             dof = assembler._dof_manager.dof_ind(g, discr.cell_variable)
-            assert np.allclose(basis_sum[dof], 1)
+            assert np.allclose(basis_sum[dof], 1, rtol=1e-3)
 
         # Check that the mortar fluxes sum to zero for local problems.
         for e, _ in assembler.gb.edges():
