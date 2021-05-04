@@ -366,6 +366,7 @@ class LocalGridBucketSet:
         for g in g_0d_frac_bound:
             g.from_fracture = True
             g.is_auxiliary = False
+            g.tags["frac_id"] = -1 # it comes from a fracture not yet sure which one
 
         for g in g_0d_domain_boundary:
             g.from_fracture = False
