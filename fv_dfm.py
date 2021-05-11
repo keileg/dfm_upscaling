@@ -326,7 +326,7 @@ class FVDFM(pp.FVElliptic):
             cc_bc_values,
             full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
         ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
-        print(f"finished basis functions {time() - tic}")
+        #        print(f"finished basis functions {time() - tic}")
         # Call method to transfer basis functions to transmissibilties over coarse
         # edges
         trm_cell = local_problems.compute_transmissibilies(
