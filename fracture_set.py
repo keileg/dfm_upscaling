@@ -6,7 +6,7 @@ import porepy as pp
 
 
 def split_network(network, selection_criterion, **kwargs):
-    """ Construct the network for the macro and micro fractures.
+    """Construct the network for the macro and micro fractures.
     No modification on the geometry of the fractures is done.
     If the selection_criterion is a vector a logical operator is applied.
     """
@@ -20,16 +20,30 @@ def split_network(network, selection_criterion, **kwargs):
 
     if _is_3d(network):
         # construct the macro fracture network
-        macro_fractures = network._fractures[macro]
+
+        macro_fractures = [
+            network._fractures[fi].copy() for fi in range(len(macro)) if macro[fi]
+        ]
         macro_network = pp.FractureNetwork3d(
             macro_fractures, network.domain, network.tol
         )
 
         # construct the micro fracture network
-        micro_fractures = network._fractures[micro]
+        micro_fractures = [
+            network._fractures[fi].copy() for fi in range(len(micro)) if micro[fi]
+        ]
         micro_network = pp.FractureNetwork3d(
             micro_fractures, network.domain, network.tol
         )
+
+        macro_network.tags["is_macro"] = [True for _ in macro_network._fractures]
+        macro_network.tags["is_micro"] = [False for _ in macro_network._fractures]
+
+        micro_network.tags["is_macro"] = [False for _ in micro_network._fractures]
+        micro_network.tags["is_micro"] = [True for _ in micro_network._fractures]
+
+        network.tags["is_macro"] = [False for _ in network._fractures]
+        network.tags["is_micro"] = [True for _ in network._fractures]
 
     elif _is_2d(network):
         # construct the macro fracture network
@@ -68,8 +82,7 @@ def split_network(network, selection_criterion, **kwargs):
 
 
 class Criterion(object):
-    """ Static class that stores different possible criteria to select fractures.
-    """
+    """Static class that stores different possible criteria to select fractures."""
 
     @staticmethod
     def none(network, **kwargs):
@@ -104,14 +117,13 @@ class Criterion(object):
 
         return length < kwargs["branch_length"]
 
-    @staticmethod
     def not_smaller_then(network, **kwargs):
         """ All the fractures not strictly smaller than a level will be micro """
         return np.logical_not(Criterion.smaller_than(network, **kwargs))
 
     @staticmethod
     def isolated(network, **kwargs):
-        """ All the fractures that are isolated are micro.
+        """All the fractures that are isolated are micro.
         A fracture is isolated if both point of the associated edges are unique.
         NOTE: no intersection between fractures is computed
         """
@@ -136,6 +148,20 @@ class Criterion(object):
     @staticmethod
     def not_isolated_branch(network, **kwargs):
         return np.logical_not(self.isolated_branch(network, **kwargs))
+
+    @staticmethod
+    def index_larger_than(network, ind: int, **kwargs):
+        if _is_2d(network):
+            raise NotImplementedError
+
+        else:
+            logicals = []
+            for i, _ in enumerate(network._fractures):
+                if i > ind:
+                    logicals += [True]
+                else:
+                    logicals += [False]
+            return logicals
 
 
 def _is_3d(network):
