@@ -366,7 +366,7 @@ class LocalGridBucketSet:
         for g in g_0d_frac_bound:
             g.from_fracture = True
             g.is_auxiliary = False
-            g.tags["frac_id"] = -1 # it comes from a fracture not yet sure which one
+            g.tags["frac_id"] = -1  # it comes from a fracture not yet sure which one
 
         for g in g_0d_domain_boundary:
             g.from_fracture = False
@@ -1400,8 +1400,14 @@ class LocalGridBucketSet:
         # Fetch higher-dimensional neighbors
         high_neigh = gb.node_neighbors(g, only_higher=True)
 
-        # No idea why this assertion would be broken, but it sure can't be good.
-        assert high_neigh.size == 2
+        if high_neigh.size == 1:
+            # This can happen if a fracture terminates in a constraint surface.
+            # Eliminate the grid, no need to do anything more.
+            low_neigh = gb.node_neighbors(g, only_lower=True)
+            # This seems like a reasonable precaution
+            assert low_neigh.size == 0
+            gb.remove_node(g)
+            return
 
         # There is now one GridBucket between the auxiliary grid and each of the
         # surface grids. Fetch both the relevant mortar grids.
