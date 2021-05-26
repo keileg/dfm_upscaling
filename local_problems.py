@@ -174,7 +174,6 @@ def _match_points_on_surface(
     matches = np.where(num_occ >= 2)[0]
 
     pairs = []
-
     # Loop over all matching pairs
     for ind in np.unique(matches):
         hit = np.where(mapping == ind)[0]
@@ -416,14 +415,6 @@ def cell_basis_functions(
         # Done with all calculations for this basis function. Store it.
         basis_functions[coarse_ind] = x
 
-        #        if reg.reg_ind == 6:
-        #            if gb.dim_max() == 2:
-        #                p = x[assembler.dof_ind(gb.grids_of_dimension(2)[0], "pressure")]
-        #                pp.plot_grid(gb.grids_of_dimension(2)[0], p)
-        #                import matplotlib.pyplot
-        #                matplotlib.pyplot.show()
-        # #                breakpoint()
-
         coarse_gb[coarse_ind] = gb
 
         coarse_assembler[coarse_ind] = assembler
@@ -445,6 +436,16 @@ def cell_basis_functions(
     for bi in reg.macro_boundary_faces():
         if macro_data["bc"].is_dir[bi]:
             check_basis = False
+
+    if False:
+        for g, d in gb:
+            bc_values = debug_bc_val_map[g]
+            bc = d["parameters"]["flow"]["bc"]
+            d["parameters"]["flow"]["bc_values"] = debug_bc_val_map[g]
+            discr_loc = d["discretization"]["pressure"]["pressure_discr"]
+            mat, rhs = discr_loc.assemble_matrix_rhs(g, d)
+            x = sps.linalg.spsolve(mat, rhs)
+            print(x)
 
     # NOTE: This makes the tacit assumption that the ordering of the grids is the same
     # in all assemblers. This is probably true, but it should be the first item to
@@ -788,6 +789,7 @@ def compute_transmissibilies(
         if macro_data["bc"].is_dir[bi]:
             check_trm = False
 
+    #    check_trm = False
     # NOTE: This makes the tacit assumption that the ordering of the grids is the same
     # in all assemblers. This is probably true, but it should be the first item to
     # check if we get an error message here
@@ -798,7 +800,7 @@ def compute_transmissibilies(
         trm_scale = np.amax(np.bincount(coarse_face_ind, weights=0.5 * np.abs(trm)))
         trm_scale = trm_scale if trm_scale else 1
         hit = np.abs(trm_sum) > 1e-6  # tpfa in 3d gave some problems, this fixed them
-        assert np.allclose(trm_sum[hit] / trm_scale, 0)
+        assert np.allclose(trm_sum[hit] / trm_scale, 0, atol=1e-4)
 
     return coarse_cell_ind, coarse_face_ind, trm
 
