@@ -26,7 +26,7 @@ class LocalGridBucketSet:
 
         self.dim = dim
         self.reg = reg
-        self.tol = 1e-6
+        self.tol = 1e-8
 
     def bucket_list(self) -> List[Dict[pp.GridBucket, List[int]]]:
         """Get all grid buckets associated with (the boundary of) an interaction region.
