@@ -402,7 +402,6 @@ class LocalGridBucketSet:
 
         # Data structure for storage of 1d grids
         buckets_1d: Dict[pp.GridBucket, List[int]] = {}
-
         # Loop over the edges in the interaction region
         for ia_edge, node_type in zip(self.reg.edges, self.reg.edge_node_type):
 
@@ -1273,6 +1272,10 @@ class LocalGridBucketSet:
                     # that point in the same direction as the macro vector, relative to the
                     # normal vector of the macro face.
 
+                    # Disregard faces not on the boundary (they may be present
+                    # due to rounding effects in the above matching).
+                    on_bound = np.intersect1d(on_bound, g.get_boundary_faces())
+
                     # Create micro vectors
                     micro_cell_ind = g.cell_faces.tocsr()[on_bound].indices
                     micro_vec = fc[:, on_bound] - cc[:, micro_cell_ind]
@@ -1424,7 +1427,6 @@ class LocalGridBucketSet:
         # remove edges from the 1d auxiliary grids to any connected 0d grids,
         # formed by the intersection with a fracture.
         gb.remove_node(g)
-
         # Define a new edge between the surface grids, but only if it has not
         # been added before.
         if not (
