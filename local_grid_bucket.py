@@ -1004,6 +1004,10 @@ class LocalGridBucketSet:
 
                 self._eliminate_1d_grid_from_gb(g, gb_loc)
 
+            if len(gb_loc.grids_of_dimension(1)) == 0:
+                for g in gb_loc.grids_of_dimension(0):
+                    gb_loc.remove_node(g)
+
             # The tagging of boundary faces in gb_loc is not to be trusted, since the function
             # which takes care of this (pp.fracs.meshing._tag_faces()) is mainly made for a
             # single grid in the highest dimension. Fixing these issues seems complex (I tried)
