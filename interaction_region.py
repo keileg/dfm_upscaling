@@ -75,7 +75,7 @@ class InteractionRegion:
             # These are random values, use with care.
             mesh_args = {
                 "mesh_size_frac": extent / 3,
-                "mesh_size_bound": extent / 1,
+                "mesh_size_bound": extent / 3,
                 "mesh_size_min": extent / 5,
             }
         if self.dim == 2:
@@ -331,7 +331,6 @@ class InteractionRegion:
 
             # Finally remove the node
             gb.remove_node(gf)
-
         return gb, network_for_meshing
 
     def _mesh_3d(self, mesh_args) -> Tuple[pp.GridBucket, pp.FractureNetwork2d]:
@@ -466,17 +465,18 @@ class InteractionRegion:
 
         # For 2d grids, make frac_num point to the fracture index in the global list
         # of fractures.
-        # Counter for the list of 2d grids in gb
-        counter = 0
-        for ind in range(ind_map.size):
-            if ind in updated_constraint_inds:
-                # Constraints do not have grids assigned.
-                continue
+        if len(gb.grids_of_dimension(2)) > 0:
+            # Counter for the list of 2d grids in gb
+            counter = 0
+            for ind in range(ind_map.size):
+                if ind in updated_constraint_inds:
+                    # Constraints do not have grids assigned.
+                    continue
 
-            # Fracture index, adjust for macro fratures.
-            frac_ind = ind_map[ind] - self.num_macro_frac_faces
-            gb.grids_of_dimension(2)[counter].frac_num = frac_ind
-            counter += 1
+                # Fracture index, adjust for macro fratures.
+                frac_ind = ind_map[ind] - self.num_macro_frac_faces
+                gb.grids_of_dimension(2)[counter].frac_num = frac_ind
+                counter += 1
 
         return gb, network
 
