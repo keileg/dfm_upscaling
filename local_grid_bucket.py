@@ -1044,6 +1044,42 @@ class LocalGridBucketSet:
             true_bnd = np.zeros(all_2_unique.size, dtype=bool)
             true_bnd[np.in1d(all_2_unique, bnd)] = True
 
+            if self.reg.is_tip:
+                # Tip nodes (only relevant for mpfa-style regions) have split faces
+                # in 3d, thus in the 2d surface grids, with the same global point index.
+                # These will occur twice in the above fn_all, and thus be counted as
+                # internal, but should rather be tags as domain boundary faces.
+                for gi, g in enumerate(gb_loc.grids_of_dimension(2)):
+                    # To identify relevant grids, find those that have only one
+                    # interface to another 2d grid: all surface grids are of triangular,
+                    # domains, with one of the edges towards an edge in the ia_reg,
+                    # two edges towards other surface grids. The surface grids
+                    # on the macro fracutres have been split away from their second
+                    # surface neighbor.
+
+                    # Loop over grid bucket edges, count the number of interfaces
+                    # to other 2d grids
+                    edge_counter = 0
+                    for e, _ in gb_loc.edges_of_node(g):
+                        if e[0].dim < 2 or e[1].dim < 2:
+                            continue
+                        edge_counter += 1
+                    if edge_counter > 1:
+                        # If there is more than one, this is not a surface next
+                        # to a macro fracture
+                        continue
+
+                    # Set all faces on the domain boundary which are not marked as
+                    # on a fracture to be a true boundary.
+                    dbf = g.tags["domain_boundary_faces"]
+                    ibf = g.tags["fracture_faces"]
+
+                    bound_not_frac = np.logical_and(dbf, np.logical_not(ibf))[dbf]
+
+                    start = bnd_face_start[gi]
+                    end = bnd_face_start[gi + 1]
+                    true_bnd[start:end][bound_not_frac] = True
+
             # Data structue for storing nodes on the boundary
             bnd_nodes = np.array([], dtype=int)
 
