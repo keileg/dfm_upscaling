@@ -370,6 +370,9 @@ class InteractionRegion:
             # This is a tpfa region, where the notion of tip nodes make no sense
             pass
 
+        # Tag the region surfaces as (macro) fracture or not
+        surface_is_fracture: List[bool] = []
+
         for si, (surf, node_type) in enumerate(
             zip(self.surfaces, self.surface_node_type)
         ):
@@ -390,15 +393,20 @@ class InteractionRegion:
                         # Take note that this surface was on a macro fracture face, and was not
                         # added to the boundary of the interaction region.
                         ind_surf_on_macro_frac.append(si)
+                        surface_is_fracture.append(True)
                         # Do not add surface to region boundary
                         continue
 
             # We will make it to here, unless this is a mpfa region on a tip node,
             # and the surfaces is based on what is a macroscale fracture.
             boundaries.append(self.coords(surf, node_type))
+            surface_is_fracture.append(False)
 
         # Store indices of region surfaces not added to the boundary.
         self.ind_surf_on_macro_frac = np.array(ind_surf_on_macro_frac)
+
+        # Store boolean of which surfaces are macro fractures.
+        self.surface_is_macro_fracture: List[bool] = surface_is_fracture
 
         # The ordering of the network boundary surfaces is the same as for the IAreg
         self.domain_edges_2_reg_surface = np.arange(len(boundaries))

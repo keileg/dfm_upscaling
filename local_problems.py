@@ -586,6 +586,20 @@ def compute_transmissibilies(
             is_embedded=True,
             surface_tag=PhysicalNames.DOMAIN_BOUNDARY_SURFACE.value,
         )
+        if reg.is_tip:
+            fracture_domain_boundary = msh_2_grid.create_2d_grids(
+                pts,
+                cells,
+                phys_names,
+                cell_info,
+                is_embedded=True,
+                surface_tag=PhysicalNames.FRACTURE.value,
+            )
+            macro_fracture_boundary = [
+                g
+                for g in fracture_domain_boundary
+                if g.frac_num < reg.num_macro_frac_faces
+            ]
 
     # In the main loop over micro surface grids below, we need access to a limited set
     # of information. This includes the coarse face index, which must be obtained in
@@ -635,16 +649,13 @@ def compute_transmissibilies(
 
         surfaces.append(Surface(cfi, cc, nc, gs.dim))
 
-    if reg.dim == 2 and reg.is_tip:
+    if reg.is_tip:
         # Also add surfaces for the fracture boundary.
         for gs in macro_fracture_boundary:
             gs.compute_geometry()
             for fi in np.where(reg.surface_is_macro_fracture)[0]:
                 cfi = reg.surfaces[fi][reg.surface_node_type[fi].index("face")]
                 surfaces.append(Surface(cfi, gs.cell_centers, gs.nodes, gs.dim))
-    elif reg.dim == 3:
-        # FIXME: Need to do a similar fix in 3d.
-        pass
 
     macro_div = pp.fvutils.scalar_divergence(coarse_grid)
 
