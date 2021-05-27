@@ -348,7 +348,7 @@ class InteractionRegion:
         # must be split). To that end, we first identify which surfaces in the
         # macro region corresponds to macro faces
         if self.name == "mpfa":
-            tip_node = self.g.tags["node_is_tip_of_some_fracture"][self.reg_ind]
+            self.is_tip = self.g.tags["node_is_tip_of_some_fracture"][self.reg_ind]
             macro_faces = self.macro_face_ind()
 
             # This is the list of face indices, which, when encountered in the loop
@@ -368,13 +368,13 @@ class InteractionRegion:
                     macro_face_in_region.append(self.g.frac_pairs[1, hit][0])
         else:
             # This is a tpfa region, where the notion of tip nodes make no sense
-            tip_node = False
+            pass
 
         for si, (surf, node_type) in enumerate(
             zip(self.surfaces, self.surface_node_type)
         ):
             if self.name == "mpfa":
-                if tip_node and "node" in node_type:
+                if self.is_tip and "node" in node_type:
                     assert "face" in node_type
                     face = node_type.index("face")
                     global_face_ind = surf[face]
@@ -446,7 +446,7 @@ class InteractionRegion:
         # In the process, the connectivity within a microscale fracture which crosses a
         # macro fracture is broken, however, this will be compensated in the macroscale
         # fracture-matrix interaction.
-        if tip_node:
+        if self.is_tip:
             grids_to_remove = gb.grids_of_dimension(2)[: self.num_macro_frac_faces]
             for rem in grids_to_remove:
                 # Pick out intersection lines in the plane of the fake fracture
@@ -455,7 +455,7 @@ class InteractionRegion:
                     # Pick out 0d point grids
                     neigh_0d = gb.node_neighbors(neigh, only_lower=True)
                     for point in neigh_0d:
-                        # First remove the 0d node. This alse deletes all edges between
+                        # First remove the 0d node. This also deletes all edges between
                         # this node and intersection lines
                         gb.remove_node(point)
                     # All connections to 0d points are deleted, we can delete the line
