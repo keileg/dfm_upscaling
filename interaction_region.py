@@ -477,7 +477,7 @@ class InteractionRegion:
             # Counter for the list of 2d grids in gb
             counter = 0
             for ind in range(ind_map.size):
-                if ind in updated_constraint_inds:
+                if ind < self.num_macro_frac_faces or ind in updated_constraint_inds:
                     # Constraints do not have grids assigned.
                     continue
 
