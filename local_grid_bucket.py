@@ -1074,7 +1074,9 @@ class LocalGridBucketSet:
                     dbf = g.tags["domain_boundary_faces"]
                     ibf = g.tags["fracture_faces"]
 
-                    bound_not_frac = np.logical_and(dbf, np.logical_not(ibf))[dbf]
+                    bound_not_frac = np.logical_and(dbf, np.logical_not(ibf))[
+                        g.get_all_boundary_faces()
+                    ]
 
                     start = bnd_face_start[gi]
                     end = bnd_face_start[gi + 1]
