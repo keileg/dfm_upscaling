@@ -942,7 +942,7 @@ class LocalGridBucketSet:
         surface_buckets: Dict[pp.GridBucket, List[int]] = {}
         # Loop over clusters
 
-        for c in clusters:
+        for cluster_counter, c in enumerate(clusters):
 
             g2, g1, g0 = [], [], []
 
@@ -1005,6 +1005,12 @@ class LocalGridBucketSet:
 
             if len(gb_loc.grids_of_dimension(1)) == 0:
                 for g in gb_loc.grids_of_dimension(0):
+                    gb_loc.remove_node(g)
+
+            # Some times the above procedure leaves isolated 0d grids. Remove these;
+            # they should not really matter.
+            for g in gb_loc.grids_of_dimension(0):
+                if len([e for e in gb_loc.edges_of_node(g)]) == 0:
                     gb_loc.remove_node(g)
 
             # The tagging of boundary faces in gb_loc is not to be trusted, since the function
