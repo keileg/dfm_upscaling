@@ -6,6 +6,7 @@ from typing import Dict
 import numpy as np
 import porepy as pp
 import scipy.sparse as sps
+import gmsh
 
 import multiprocessing as mp
 from functools import partial
@@ -212,6 +213,11 @@ class FVDFM(pp.FVElliptic):
             # run the code in parallel
             with mp.Pool(processes=num_processes) as p:
                 out = p.map(discr_ig, list(self._interaction_regions(g)))
+
+        # Finalize gmsh now that we're done with the discretization.
+        gmsh.finalize()
+        # Also inform the Gmsh writer we have finalized gmsh.
+        pp.fracs.gmsh_interface.GmshWriter.gmsh_initialized = False
 
         # Data structures to build up the flux discretization as a sparse coo-matrix
         rows_flux, cols_flux, data_flux = [], [], []

@@ -274,7 +274,9 @@ class InteractionRegion:
 
         # Generate the mesh. Also write .geo file to ease debugging;
         # we will delete this later on.
-        gmsh_writer.generate(self.file_name, write_geo=True)
+        gmsh_writer.generate(
+            self.file_name, write_geo=True, clear_gmsh=True, finalize=False
+        )
 
         grid_list = pp.fracs.simplex.triangle_grid_from_gmsh(
             self.file_name, constraints=edge_2_constraint
@@ -445,6 +447,8 @@ class InteractionRegion:
             file_name=self.file_name,
             constraints=updated_constraint_inds,
             write_geo=True,
+            finalize_gmsh=False,
+            clear_gmsh=True,
         )
 
         # In the construction of the grid bucket, the 3d grid had its faces split along
