@@ -420,32 +420,39 @@ class InteractionRegion:
 
         # The polygons to be used for meshing are the macro and micro surfaces,
         # and the constraints.
-        polygons: List[np.ndarray] = macro_frac_surfaces + self.fractures + constraints
+        polygons: List[np.ndarray] = macro_frac_surfaces + self.fractures
 
         # Update number of macro faces introduced.
         self.num_macro_frac_faces = len(macro_frac_surfaces)
 
-        constraint_inds = (
-            self.num_macro_frac_faces
-            + len(self.fractures)
-            + np.arange(len(constraints))
-        )
         network = pp.FractureNetwork3d(polygons)
         # Impose the boundary on the fracture network.
         # The area threshold is assigned to avoid very small fractures.
         ind_map = network.impose_external_boundary(boundaries, area_threshold=1e-2)
-        updated_constraint_inds = []
 
-        for ci in constraint_inds:
-            ui = np.where(ind_map == ci)[0]
-            assert ui.size == 1
-            updated_constraint_inds.append(ui[0])
+        # Insert constraints (which are within the boundaries, so no need to truncate them)
+        # between the fractures and the boundary planes.
+        num_frac = network.num_frac()
+        network._fractures = (
+            network._fractures[:num_frac] + constraints + network._fractures[num_frac:]
+        )
+        # Also update boundary tags
+        network.tags["boundary"] = (len(constraints) + num_frac) * [False] + sum(
+            network.tags["boundary"]
+        ) * [True]
+
+        # Reindex the fractures. The fracture index is only used internally in
+        # the FractureNetwork class. The frac_num attribute of the 2d grids is
+        # overriden below (towards the end of this function)
+        network._reindex_fractures()
+
+        constraint_inds = num_frac + np.arange(len(constraints))
 
         # Generate local mesh for the interaction region
         gb = network.mesh(
             mesh_args=mesh_args,
             file_name=self.file_name,
-            constraints=updated_constraint_inds,
+            constraints=constraint_inds,
             write_geo=True,
             finalize_gmsh=False,
             clear_gmsh=True,
@@ -481,8 +488,8 @@ class InteractionRegion:
             # Counter for the list of 2d grids in gb
             counter = 0
             for ind in range(ind_map.size):
-                if ind < self.num_macro_frac_faces or ind in updated_constraint_inds:
-                    # Constraints do not have grids assigned.
+                if ind < self.num_macro_frac_faces or ind in constraint_inds:
+                    # Macro fractures were removed above, constraints do not have grids assigned.
                     continue
 
                 # Fracture index, adjust for macro fratures.
