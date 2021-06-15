@@ -78,7 +78,7 @@ class InteractionRegion:
             mesh_args = {
                 "mesh_size_frac": extent / 3,
                 "mesh_size_bound": extent / 3,
-                "mesh_size_min": extent / 5,
+                "mesh_size_min": extent / 20,
             }
         if self.dim == 2:
             return self._mesh_2d(mesh_args)
@@ -431,7 +431,6 @@ class InteractionRegion:
         # Impose the boundary on the fracture network.
         # The area threshold is assigned to avoid very small fractures.
         ind_map = network.impose_external_boundary(boundaries, area_threshold=1e-2)
-
         # Insert constraints (which are within the boundaries, so no need to truncate them)
         # between the fractures and the boundary planes.
         num_frac = network.num_frac()
@@ -453,14 +452,35 @@ class InteractionRegion:
         constraint_inds = num_frac + np.arange(len(constraints))
 
         # Generate local mesh for the interaction region
-        gb = network.mesh(
-            mesh_args=mesh_args,
-            file_name=self.file_name,
-            constraints=constraint_inds,
-            write_geo=True,
-            finalize_gmsh=False,
-            clear_gmsh=True,
-        )
+        max_remeshing = 10
+        mesh_counter = 0
+        while mesh_counter < max_remeshing:
+            try:
+                gb = network.mesh(
+                    mesh_args=mesh_args,
+                    file_name=self.file_name,
+                    constraints=constraint_inds,
+                    write_geo=True,
+                    finalize_gmsh=False,
+                    clear_gmsh=True,
+                )
+                g3 = gb.grids_of_dimension(3)[0]
+                if g3.cell_volumes.min() > 1e-7 * np.median(g3.cell_volumes):
+                    break
+
+            except:
+                pass
+            mesh_args["mesh_size_min"] *= 0.8
+            mesh_args["mesh_size_frac"] *= 0.95
+            mesh_args["mesh_size_bound"] *= 0.95
+
+            mesh_counter += 1
+            print(f"Remeshing region {self.reg_ind}")
+
+            if mesh_counter == max_remeshing:
+                raise ValueError(
+                    f"Interaction region meshing failed after {max_remeshing} attepmts"
+                )
 
         # In the construction of the grid bucket, the 3d grid had its faces split along
         # all fractures, hereunder any artifical fracture that was inserted to compensate
