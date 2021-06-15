@@ -1,6 +1,7 @@
 """
 
 """
+import tracemalloc
 from time import time
 from typing import Dict
 import numpy as np
@@ -208,7 +209,9 @@ class FVDFM(pp.FVElliptic):
         )
         if num_processes == 1:
             # run the code in serial, useful also for debug
-            out = [discr_ig(reg) for reg in self._interaction_regions(g)]
+            out = []
+            for reg in self._interaction_regions(g):
+                out.append(discr_ig(reg))
         else:
             # run the code in parallel
             with mp.Pool(processes=num_processes) as p:
@@ -314,54 +317,110 @@ class FVDFM(pp.FVElliptic):
     def _discretize_interaction_region(
         self, g, micro_network, parameter_dictionary, local_mesh_args, reg
     ):
-        #        if reg.reg_ind != 17:
-        #            return [], [], [], []
+        # if reg.reg_ind != 3245:
+        #    return [], [], [], []
 
         tic_fv = time()
         # Add the fractures to be upscaled
         self._add_network_to_upscale(reg, micro_network)
 
         # construct the sequence of local grid buckets
-        gb_set = LocalGridBucketSet(g.dim, reg)
-        gb_set.construct_local_buckets(local_mesh_args)
-        tic = time()
-        # First basis functions for local problems
-        (
-            basis_functions,
-            cc_assembler,  # Assembler for local Nd problem, one per coarse cell center
-            cc_bc_values,
-            full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
-        ) = local_problems.cell_basis_functions(reg, gb_set, self, parameter_dictionary)
-        #        print(f"finished basis functions {time() - tic}")
-        # Call method to transfer basis functions to transmissibilties over coarse
-        # edges
-        trm_cell = local_problems.compute_transmissibilies(
-            reg,
-            gb_set,
-            basis_functions,
-            cc_assembler,
-            cc_bc_values,
-            g,
-            self,
-            parameter_dictionary,
-        )
+        num_trials = 0
+        max_num_trials = 3
 
-        matrix_bound_pressure_cell = (
-            local_problems.discretize_pressure_trace_macro_bound(
+        def _run_discr():
+            # Actual implemnetation of the discretization.
+
+            gb_set = LocalGridBucketSet(g.dim, reg)
+            gb_set.construct_local_buckets(local_mesh_args)
+            # First basis functions for local problems
+            (
+                basis_functions,
+                cc_assembler,  # Assembler for local Nd problem, one per coarse cell center
+                cc_bc_values,
+                full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
+                ilu_map,
+            ) = local_problems.cell_basis_functions(
+                reg, gb_set, self, parameter_dictionary
+            )
+            # Call method to transfer basis functions to transmissibilties over coarse
+            # edges
+            trm_cell = local_problems.compute_transmissibilies(
+                reg,
+                gb_set,
+                basis_functions,
+                cc_assembler,
+                cc_bc_values,
                 g,
+                self,
+                parameter_dictionary,
+            )
+
+            matrix_bound_pressure_cell = (
+                local_problems.discretize_pressure_trace_macro_bound(
+                    g,
+                    gb_set,
+                    self,
+                    cc_assembler,
+                    basis_functions,
+                )
+            )
+
+            (
+                trm_boundary,
+                matrix_bound_pressure_face,
+            ) = local_problems.discretize_boundary_conditions(
+                reg,
                 gb_set,
                 self,
-                cc_assembler,
-                basis_functions,
+                parameter_dictionary,
+                g,
+                full_assembler_map,
+                ilu_map,
             )
-        )
+            return (
+                trm_cell,
+                trm_boundary,
+                matrix_bound_pressure_cell,
+                matrix_bound_pressure_face,
+            )
 
-        (
-            trm_boundary,
-            matrix_bound_pressure_face,
-        ) = local_problems.discretize_boundary_conditions(
-            reg, gb_set, self, parameter_dictionary, g, full_assembler_map
-        )
+        debug_mode = parameter_dictionary.get("debug_mode", False)
+
+        if not debug_mode:
+            while num_trials < max_num_trials:
+                try:
+                    (
+                        trm_cell,
+                        trm_boundary,
+                        matrix_bound_pressure_cell,
+                        matrix_bound_pressure_face,
+                    ) = _run_discr()
+                    break
+                except:
+                    num_trials += 1
+                    breakpoint()
+                    local_mesh_args["mesh_args"]["mesh_size_frac"] *= 0.95
+                    local_mesh_args["mesh_args"]["mesh_size_bound"] *= 0.95
+                    local_mesh_args["mesh_args"]["mesh_size_min"] *= 0.9
+
+                    msg = (
+                        f"Discretization of region {reg.reg_ind} failed in local meshing "
+                        " or basis function computation\n."
+                        "Try again with slightly finer mesh."
+                    )
+                    print(msg)
+
+            if num_trials == max_num_trials:
+                raise RuntimeError(f"Discretization failed in region {reg.reg_ind}")
+        else:
+            (
+                trm_cell,
+                trm_boundary,
+                matrix_bound_pressure_cell,
+                matrix_bound_pressure_face,
+            ) = _run_discr()
+
         # For debugging purposes e have kept the mesh files for this region up to this point
         # but now it should be okay to delete it
         reg.cleanup()
