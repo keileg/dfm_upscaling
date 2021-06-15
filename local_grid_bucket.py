@@ -135,6 +135,16 @@ class LocalGridBucketSet:
             if np.unique(frac_num).size == 1:
                 self._eliminate_1d_grid_from_gb(g, gb)
 
+        # Also kick out 1d grids that have no lower-dimensional neighbors and only
+        # one higher-dim neighbor. This will likely be a fracture that terminated
+        # in a constraint - in reality no 1d grid should have been generated here,
+        # but I'm too fed up to fix that now.
+        for g in gb.grids_of_dimension(1):
+            neighs_high = gb.node_neighbors(g, only_higher=True)
+            neighs_low = gb.node_neighbors(g, only_lower=True)
+            if len(neighs_high) < 2 and len(neighs_low) == 0:
+                self._eliminate_1d_grid_from_gb(g, gb)
+
         self.gb = gb
         self.network = network
         network._decomposition = network.decomposition
