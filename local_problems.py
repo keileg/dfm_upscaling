@@ -150,7 +150,9 @@ def _match_points_on_surface(
 
         else:
             # In 3d, we can use a pp function to get the normal vector
-            n = pp.map_geometry.compute_normal(all_surface_points).reshape((-1, 1))
+            n = pp.map_geometry.compute_normal(all_surface_points, tol=tol).reshape(
+                (-1, 1)
+            )
 
         # Index of points in the plane
         assert np.all(np.isfinite(n))
