@@ -13,6 +13,7 @@ from typing import List, Tuple, Dict, Union
 
 
 import scipy.sparse as sps
+import scipy.sparse.linalg as spla
 from porepy.fracs import msh_2_grid
 from porepy.fracs.gmsh_interface import Tags, PhysicalNames
 from porepy.fracs import simplex
@@ -216,6 +217,9 @@ def cell_basis_functions(
     # and then the real local gb
     bucket_list = local_gb.bucket_list()
 
+    ilu_map = {}
+    ilu_threshold = 10000
+
     # Loop over all grid buckets: first type of gb (line, surface, 3d)
     for gb_set in bucket_list:
         # Then all gbs of this type
@@ -234,6 +238,12 @@ def cell_basis_functions(
             assembler.discretize()
 
             A, _ = assembler.assemble_matrix_rhs(only_matrix=True)
+            if A.shape[0] > ilu_threshold:
+                ilu = spla.spilu(A)
+                print("ILU done")
+                Mx = lambda v: ilu.solve(v)
+                M = spla.LinearOperator(A.shape, Mx)
+                ilu_map[gb] = M
 
             # Associate the assembler with this gb
             assembler_map[gb] = (assembler, A)
@@ -337,6 +347,7 @@ def cell_basis_functions(
                             loc_discr = d[pp.DISCRETIZATION][discr.cell_variable][
                                 discr.cell_discr
                             ]
+                            breakpoint()
                             # Rediscretize local problem, unless this is a 1d auxiliary line
                             # where a continuity condition has been imposed (this effectively
                             # will have no boundary condition). In the latter case, it would not
@@ -383,7 +394,19 @@ def cell_basis_functions(
                     # This will use the updated values for the boundary conditions
                     _, b = assembler.assemble_matrix_rhs(only_rhs=True)
                     # Solve and distribute
-                    x = sps.linalg.spsolve(A, b)
+                    if gb in ilu_map:
+                        x, info = spla.gmres(
+                            A=A, b=b, M=ilu_map[gb], restart=500, maxiter=20
+                        )
+                        if info > 0:
+                            raise ValueError(
+                                "Gmres failed in basis function computation"
+                            )
+                    else:
+                        x = sps.linalg.spsolve(A, b)
+
+                    if not np.all(np.isfinite(x)):
+                        breakpoint()
 
                 assembler.distribute_variable(x)
 
@@ -463,7 +486,7 @@ def cell_basis_functions(
             dof = assembler._dof_manager.dof_ind(e, discr.mortar_variable)
             assert np.allclose(basis_sum[dof], 0)
 
-    return basis_functions, coarse_assembler, coarse_bc_values, assembler_map
+    return basis_functions, coarse_assembler, coarse_bc_values, assembler_map, ilu_map
 
 
 def discretize_pressure_trace_macro_bound(
@@ -819,7 +842,7 @@ def compute_transmissibilies(
 
 
 def discretize_boundary_conditions(
-    reg, local_gb, discr, macro_data, coarse_g, assembler_map
+    reg, local_gb, discr, macro_data, coarse_g, assembler_map, ilu_map
 ):
     """
     Discretization of boundary conditions, consistent with the construction of basis
@@ -1062,7 +1085,12 @@ def discretize_boundary_conditions(
                     # This will use the updated values for the boundary conditions
                     _, b = assembler.assemble_matrix_rhs(only_rhs=True)
                     # Solve and distribute
-                    x = sps.linalg.spsolve(A, b)
+                    if gb in ilu_map:
+                        x, _ = spla.gmres(
+                            A=A, b=b, M=ilu_map[gb], restart=500, maxiter=20
+                        )
+                    else:
+                        x = sps.linalg.spsolve(A, b)
 
                 assembler.distribute_variable(x)
 
