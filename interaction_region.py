@@ -62,6 +62,8 @@ class InteractionRegion:
         # Only needed in 3d.
         self.ind_surf_on_macro_frac: np.ndarray = np.array([])
 
+        self.num_micro_fractures = 0
+
     def mesh(
         self, mesh_args=None
     ) -> Tuple[pp.GridBucket, Union[pp.FractureNetwork2d, pp.FractureNetwork3d], str]:
@@ -446,6 +448,8 @@ class InteractionRegion:
         # overriden below (towards the end of this function)
         network._reindex_fractures()
 
+        self.num_micro_fractures = np.unique(ind_map).size
+
         constraint_inds = num_frac + np.arange(len(constraints))
 
         # Generate local mesh for the interaction region
@@ -659,6 +663,8 @@ class InteractionRegion:
         s += f"{self.edges.shape[0]} 1d edges\n"
         s += f"{self.surfaces.shape[0]} {self.dim - 1}d surfaces\n"
         s += f"{sum(self.surface_is_boundary)} surfaces are on the macro domain boundary\n"
+
+        s += f"There are {self.num_micro_fractures} micro fractures in the region.\n"
 
         s += f"Region has {len(self.constraints)} internal constraints at macro faces\n"
 
