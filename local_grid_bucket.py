@@ -892,6 +892,35 @@ class LocalGridBucketSet:
             for i in range(len(g_2d)):
                 graph.add_node(i)
 
+        # If a fracture intersects the region boundary in a domain boundary point,
+        # the resulting point grid may act as a brigde between what should have been
+        # two different surfaces on the interaction region boundary.
+        # Eliminate 0d grids that have neighbors which belong to different
+        # surfaces.
+        purge_from_graph = []
+        # Loop over all 0d grids
+        for i in range(num_2d_grids + num_1d_grids, max(graph.nodes()) + 1):
+            if i not in graph:
+                # If grid not added to graph, continue
+                continue
+            neighs = [i for i in graph.neighbors(i)]
+            if len(neighs) != 2:
+                # The case we are after seem to be related to a point grid having
+                # exactly 2 neighbors.
+                continue
+
+            # Find the neighbors, and their common neighbors again
+            n1, n2 = neighs
+            common = np.intersect1d(
+                list(graph.neighbors(n1)), list(graph.neighbors(n2))
+            )
+            # If the common neighbor is the 0d grid, it will be purged.
+            if common.size == 1 and common[0] == i:
+                purge_from_graph.append(i)
+
+        for pi in purge_from_graph:
+            graph.remove_node(pi)
+
         # Clusters refers to 2d surfaces, together wiht 1d auxiliary nodes that should
         # be solved together. Index up to num_2d_grids points to 2d grids, accessed via
         # g_2d, while higher index points to elements in g_1d_auxiliary
