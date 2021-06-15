@@ -125,8 +125,13 @@ class LocalGridBucketSet:
         # eliminate 1d grids that split 2d grids coming from the same global fracture.
         # This removes grids introduced by the splitting of non-convex fractures.
         for g in gb.grids_of_dimension(1):
-            neighs = gb.node_neighbors(g, only_higher=True)
-            frac_num = np.array([h.frac_num for h in neighs])
+            neighs_low = gb.node_neighbors(g, only_lower=True)
+            if len(neighs_low) > 0:
+                # Do not eliminate if the 1d grid has point neighbors, that may
+                # isolate the latter.
+                continue
+            neighs_high = gb.node_neighbors(g, only_higher=True)
+            frac_num = np.array([h.frac_num for h in neighs_high])
             if np.unique(frac_num).size == 1:
                 self._eliminate_1d_grid_from_gb(g, gb)
 
