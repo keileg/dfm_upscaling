@@ -340,6 +340,7 @@ class FVDFM(pp.FVElliptic):
                 cc_bc_values,
                 full_assembler_map,  # Full hierarchy of (Nd, .., 0) assemblers
                 ilu_map,
+                cell_face_relations,
             ) = local_problems.cell_basis_functions(
                 reg, gb_set, self, parameter_dictionary
             )
@@ -354,6 +355,7 @@ class FVDFM(pp.FVElliptic):
                 g,
                 self,
                 parameter_dictionary,
+                cell_face_relations,
             )
 
             matrix_bound_pressure_cell = (
@@ -377,6 +379,7 @@ class FVDFM(pp.FVElliptic):
                 g,
                 full_assembler_map,
                 ilu_map,
+                cell_face_relations,
             )
             return (
                 trm_cell,

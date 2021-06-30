@@ -9,7 +9,7 @@ Created on Tue Mar 24 06:56:22 2020
 import numpy as np
 import porepy as pp
 from collections import namedtuple
-from typing import List, Tuple, Dict, Union
+from typing import List, Tuple, Dict, Union, Optional
 
 
 import scipy.sparse as sps
@@ -22,7 +22,15 @@ from .interaction_region import InteractionRegion
 from .local_grid_bucket import LocalGridBucketSet
 
 
-def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
+def transfer_bc(
+    g_prev,
+    v_prev,
+    g_new,
+    bc_values,
+    dim,
+    cell_ind: Optional[List[int]] = None,
+    face_ind: Optional[List[int]] = None,
+):
     """
     Transfer the solution from one grid to boundary condition values on a grid of
     dimension one more
@@ -45,15 +53,17 @@ def transfer_bc(g_prev, v_prev, g_new, bc_values, dim):
     fc = g_new.face_centers
 
     # Find coinciding cell centers and face centers.
-    cell_ind = []
-    face_ind = []
+    if cell_ind is None or face_ind is None:
+        cell_ind = []
+        face_ind = []
+        for pair in _match_points_on_surface(cc, fc, dim, g_prev.dim, g_prev.nodes):
+            cell_ind.append(pair[0])
+            face_ind.append(pair[1])
 
-    for pair in _match_points_on_surface(cc, fc, dim, g_prev.dim, g_prev.nodes):
+    for ci, fi in zip(cell_ind, face_ind):
         # Assign boundary condition
-        bc_values[pair[1]] = v_prev[pair[0]]
+        bc_values[fi] = v_prev[ci]
         # Store the hit
-        cell_ind.append(pair[0])
-        face_ind.append(pair[1])
 
     return cell_ind, face_ind
 
@@ -276,6 +286,8 @@ def cell_basis_functions(
     g1 = [g for g in debug_pou_map if isinstance(g, pp.Grid) and g.dim == 1]
     g2 = [g for g in debug_pou_map if isinstance(g, pp.Grid) and g.dim == 2]
 
+    cell_face_relations: Dict[Tuple[pp.Grid, pp.Grid], Tuple[List, List]] = {}
+
     # There is one basis function per coarse degree of freedom
     for coarse_ind, coarse_cc in zip(coarse_cell_ind, coarse_cell_cc.T):
 
@@ -330,9 +342,25 @@ def cell_basis_functions(
                     for g, d in gb:
                         # This will update the boundary condition values
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
-                        cells_found, faces_found = transfer_bc(
-                            g_prev, values, g, bc_values, reg.dim
-                        )
+
+                        cf = cell_face_relations.get((g_prev, g), [None, None])
+
+                        if cf[0] is None:
+                            cells_found, faces_found = transfer_bc(
+                                g_prev, values, g, bc_values, reg.dim
+                            )
+                            cell_face_relations[(g_prev, g)] = (
+                                cells_found,
+                                faces_found,
+                            )
+                        elif len(cf[0]) == 0:
+                            # We have tried this, there is nothing to do
+                            cells_found, cells_found = cf
+                        else:
+                            cells_found, faces_found = transfer_bc(
+                                g_prev, values, g, bc_values, reg.dim, cf[0], cf[1]
+                            )
+
                         found[cells_found] = True
 
                         if len(faces_found) > 0 and prev_dim < gb.dim_max() - 1:
@@ -484,9 +512,16 @@ def cell_basis_functions(
         # Check that the mortar fluxes sum to zero for local problems.
         for e, _ in assembler.gb.edges():
             dof = assembler._dof_manager.dof_ind(e, discr.mortar_variable)
-            assert np.allclose(basis_sum[dof], 0)
+            assert np.allclose(basis_sum[dof], 0, atol=1e-4)
 
-    return basis_functions, coarse_assembler, coarse_bc_values, assembler_map, ilu_map
+    return (
+        basis_functions,
+        coarse_assembler,
+        coarse_bc_values,
+        assembler_map,
+        ilu_map,
+        cell_face_relations,
+    )
 
 
 def discretize_pressure_trace_macro_bound(
@@ -542,7 +577,8 @@ def compute_transmissibilies(
     coarse_grid,
     discr,
     macro_data,
-    sanity_check=True,
+    cell_face_relations,
+    sanity_check=False,
 ):
     pts, cells, cell_info, phys_names = local_gb.gmsh_data
 
@@ -842,7 +878,14 @@ def compute_transmissibilies(
 
 
 def discretize_boundary_conditions(
-    reg, local_gb, discr, macro_data, coarse_g, assembler_map, ilu_map
+    reg,
+    local_gb,
+    discr,
+    macro_data,
+    coarse_g,
+    assembler_map,
+    ilu_map,
+    cell_face_relations,
 ):
     """
     Discretization of boundary conditions, consistent with the construction of basis
@@ -1018,10 +1061,24 @@ def discretize_boundary_conditions(
                     for g, d in gb:
                         # This will update the boundary condition values
                         bc_values = d[pp.PARAMETERS][discr.keyword]["bc_values"]
-                        cells_found, _ = transfer_bc(
-                            g_prev, values, g, bc_values, reg.dim
-                        )
-                        found[cells_found] = True
+                        cf = cell_face_relations.get((g_prev, g), [None, None])
+
+                        if cf[0] is None:
+                            cells_found, faces_found = transfer_bc(
+                                g_prev, values, g, bc_values, reg.dim
+                            )
+                            cell_face_relations[(g_prev, g)] = (
+                                cells_found,
+                                faces_found,
+                            )
+                        elif len(cf[0]) == 0:
+                            # We have tried this, there is nothing to do
+                            cells_found, cells_found = cf
+                        else:
+                            cells_found, faces_found = transfer_bc(
+                                g_prev, values, g, bc_values, reg.dim, cf[0], cf[1]
+                            )
+
                     # Verify that either all values in the previous grid has been used
                     # as boundary conditions, or none have (the latter may happen in
                     # 3d problems).
@@ -1137,6 +1194,7 @@ def discretize_boundary_conditions(
         coarse_g,
         discr,
         macro_data,
+        cell_face_relations,
         # The transmissibilities need to sum to zero for boundary discretizaitons, so
         # we skip the sanity check
         sanity_check=False,
