@@ -1005,8 +1005,15 @@ def discretize_boundary_conditions(
     for macro_face, surf, edge in surface_edge_pairs:
 
         # Number of nodes of the macro fracture - needed to get the right scaling of
-        # Neumann boundary conditions.
-        num_nodes_of_macro_face = coarse_g.face_nodes[:, macro_face].data.size
+        # Neumann boundary conditions for multi-point stencils, where each face is
+        # split into a number of subfaces, and the discretization of boundary
+        # conditions should have a similar scaling.
+        if reg.name == "mpfa":
+            num_nodes_of_macro_face = coarse_g.face_nodes[:, macro_face].data.size
+        else:
+            # In two-point stencils, the boundary discretization will be applied to
+            # the full face flux.
+            num_nodes_of_macro_face = 1
 
         # For Neumann faces, the flux through the macro face must be distributed over the
         # micro faces. If no microscale fractures touch the macro face, the micro face areas
@@ -1142,7 +1149,10 @@ def discretize_boundary_conditions(
                             bc_values[micro_bound_face] = (
                                 1
                                 * face_areas
-                                / (macro_area[gb] * num_nodes_of_macro_face)
+                                / (
+                                    coarse_g.face_areas[macro_face]
+                                    * num_nodes_of_macro_face
+                                )
                             )
 
                 # Get assembler
