@@ -718,7 +718,18 @@ def compute_transmissibilies(
                 cfi = reg.surfaces[fi][reg.surface_node_type[fi].index("face")]
                 surfaces.append(Surface(cfi, gs.cell_centers, gs.nodes, gs.dim))
 
-    macro_div = pp.fvutils.scalar_divergence(coarse_grid)
+    # The definition of mortar fluxes (positive from primary to secondary neighbor)
+    # may not correspond to the sign conventions for the local grids, thus a
+    # correction will be needed. This is costly to compute several times (once for
+    # each surface), so precompute the map.
+    sign_map: Dict[pp.Grid, np.ndarray] = {}
+    for cci in basis_functions:
+        gb = cc_assembler[cci].gb
+        for loc_g, _ in gb:
+            if np.any(loc_g.tags["fracture_faces"]):
+                # to point from the higher to the lower dimensional problem
+                _, indices = np.unique(loc_g.cell_faces.indices, return_index=True)
+                sign_map[loc_g] = loc_g.cell_faces.data[indices]
 
     # Loop over all created surface grids,
     for gs in surfaces:
@@ -754,18 +765,12 @@ def compute_transmissibilies(
             )
             # Loop over all grids in the grid_bucket.
             for loc_g, d in gb:
-
                 # Flux field for this problem of this grid
                 grid_flux = d[pp.PARAMETERS][discr.keyword]["darcy_flux"]
 
                 # Flux field for this problem due to the mortar variables
                 edge_flux = np.zeros(grid_flux.size)
                 if np.any(loc_g.tags["fracture_faces"]):
-                    # Recover the sign of the flux, since the mortar is assumed
-                    # to point from the higher to the lower dimensional problem
-                    _, indices = np.unique(loc_g.cell_faces.indices, return_index=True)
-                    sign = sps.diags(loc_g.cell_faces.data[indices], 0)
-
                     for e, d_e in gb.edges_of_node(loc_g):
                         mg = d_e["mortar_grid"]
                         # Consider only the higher dimensional case
@@ -788,7 +793,9 @@ def compute_transmissibilies(
                             # The primary grid is of higher dimension
                             proj = mg.mortar_to_primary_int()
 
-                        edge_flux += sign * proj * d_e[pp.STATE]["mortar_flux"]
+                        edge_flux += sign_map[loc_g] * (
+                            proj * d_e[pp.STATE]["mortar_flux"]
+                        )
 
                 # Construct the full flux
                 full_flux = grid_flux + edge_flux
