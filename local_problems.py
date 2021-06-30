@@ -739,10 +739,10 @@ def compute_transmissibilies(
         nc = gs.nodes
         cfi = gs.coarse_face_index
 
-        macro_sgn = macro_div[:, cfi].sum()
-
         # Macro normal vector of the face
         coarse_normal = coarse_grid.face_normals[:, cfi]
+
+        grid_map = {}
 
         # Loop over all basis functions constructed by the local problem.
         for cci, basis in basis_functions.items():
@@ -754,6 +754,28 @@ def compute_transmissibilies(
             # Grid bucket of this local problem.
             # This will be the full Nd grid bucket.
             gb = cc_assembler[cci].gb
+
+            # Precompute mappings between grids in the gb and the surface grid.
+            # These will be common for all basis functions.
+            if not coarse_grid.tags["fracture_faces"][cfi]:
+                for loc_g, _ in gb:
+                    if loc_g in grid_map:
+                        continue
+                    if loc_g.dim == gs.dim + 1:
+                        # find faces in the matrix grid on the surface
+                        grid_map[loc_g] = _match_points_on_surface(
+                            cc, loc_g.face_centers, coarse_grid.dim, gs.dim, nc
+                        )
+                    elif loc_g.dim == gs.dim:
+                        # find fractures that intersect with the surface
+                        # If we get an error message from this call, about more than one
+                        # hit in the second argument (p), chances are that a fracture is
+                        # intersecting at the auxiliary surface
+                        grid_map[loc_g] = _match_points_on_surface(
+                            nc, loc_g.face_centers, coarse_grid.dim, gs.dim, cc
+                        )
+                    else:
+                        grid_map[loc_g] = []
 
             # Set back the boundary conditions used in the computation
             for g, d in gb:
@@ -818,24 +840,7 @@ def compute_transmissibilies(
                     micro_div = pp.fvutils.scalar_divergence(loc_g)
                 else:
                     fracture_face = False
-                    if loc_g.dim == gs.dim + 1:
-                        # find faces in the matrix grid on the surface
-                        grid_map = _match_points_on_surface(
-                            cc, loc_g.face_centers, coarse_grid.dim, gs.dim, nc
-                        )
-                    elif loc_g.dim == gs.dim:
-                        # find fractures that intersect with the surface
-                        # If we get an error message from this call, about more than one
-                        # hit in the second argument (p), chances are that a fracture is
-                        # intersecting at the auxiliary surface
-
-                        grid_map = _match_points_on_surface(
-                            nc, loc_g.face_centers, coarse_grid.dim, gs.dim, cc
-                        )
-                    else:
-                        grid_map = []
-
-                    micro_faces = np.array([i[1] for i in grid_map])
+                    micro_faces = np.array([i[1] for i in grid_map[loc_g]])
 
                 # If we found any matches, loop over all micro faces, sum the fluxes,
                 # possibly with an adjustment of the flux direction.
