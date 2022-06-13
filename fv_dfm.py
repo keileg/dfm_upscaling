@@ -285,9 +285,14 @@ class FVDFM(pp.FVElliptic):
         sgn, _ = g.signs_and_cells_of_boundary_faces(neumann_faces)
         # Here we also zero out non-diagonal terms, but these should be zero anyhow
         # (by construction of the coarse problems), but better safe than sorry
-        bound_flux = pp.matrix_operations.zero_rows(
-            bound_flux, neumann_faces, diag=sgn
+        pp.matrix_operations.zero_rows(
+            bound_flux, neumann_faces
         )
+
+        # now we set the diagonal
+        diag_vals = np.zeros(bound_flux.shape[1])
+        diag_vals[neumann_faces] = sgn
+        bound_flux += sps.dia_matrix((diag_vals, 0), shape=bound_flux.shape)
 
         matrix_dictionary[self.flux_matrix_key] = flux
         matrix_dictionary[self.bound_flux_matrix_key] = bound_flux
