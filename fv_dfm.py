@@ -320,8 +320,9 @@ class FVDFM(pp.FVElliptic):
     def _discretize_interaction_region(
         self, g, micro_network, parameter_dictionary, local_mesh_args, reg
     ):
-        # if reg.reg_ind != 3245:
-        #    return [], [], [], []
+
+        #        if reg.reg_ind < 1159:
+        #            return [], [], [], []
 
         tic_fv = time()
         # Add the fractures to be upscaled
@@ -393,7 +394,7 @@ class FVDFM(pp.FVElliptic):
 
         debug_mode = parameter_dictionary.get("debug_mode", False)
 
-        if not debug_mode:
+        if False:
             while num_trials < max_num_trials:
                 try:
                     (
@@ -405,7 +406,6 @@ class FVDFM(pp.FVElliptic):
                     break
                 except:
                     num_trials += 1
-                    breakpoint()
                     local_mesh_args["mesh_args"]["mesh_size_frac"] *= 0.95
                     local_mesh_args["mesh_args"]["mesh_size_bound"] *= 0.95
                     local_mesh_args["mesh_args"]["mesh_size_min"] *= 0.9
