@@ -90,7 +90,7 @@ class FVDFM(pp.FVElliptic):
 
             pp.initialize_data(mg, d, self.keyword, param)
 
-    def set_variables_discretizations_cell_basis(self, gb):
+    def set_variables_discretizations_cell_basis(self, gb, tpfa_finescale):
         """
         Assign variables, and set discretizations for the micro gb.
 
@@ -107,7 +107,10 @@ class FVDFM(pp.FVElliptic):
         """
         # Use mpfa for the fine-scale problem for now. We may generalize this at some
         # point, but that should be a technical detail.
-        fine_scale_dicsr = pp.Mpfa(self.keyword)
+        if tpfa_finescale:
+            fine_scale_dicsr = pp.Tpfa(self.keyword)
+        else:
+            fine_scale_dicsr = pp.Tpfa(self.keyword)
         # In 1d, mpfa will end up calling tpfa, so use this directly, in a hope that
         # the reduced amount of boilerplate will save some time.
         fine_scale_dicsr_1d = pp.Tpfa(self.keyword)
