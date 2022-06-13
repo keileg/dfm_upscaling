@@ -278,14 +278,14 @@ class FVDFM(pp.FVElliptic):
         # is known). The boundary discretization is modified to simply reuse the flux.
         bc = parameter_dictionary["bc"]
         neumann_faces = np.where(bc.is_neu)[0]
-        pp.fvutils.zero_out_sparse_rows(flux, neumann_faces)
+        pp.matrix_operations.zero_rows(flux, neumann_faces)
 
         # Set sign of Neumann faces according to the divergence operator. This will
         # counteract minus signs in the divergence during assembly.
         sgn, _ = g.signs_and_cells_of_boundary_faces(neumann_faces)
         # Here we also zero out non-diagonal terms, but these should be zero anyhow
         # (by construction of the coarse problems), but better safe than sorry
-        bound_flux = pp.fvutils.zero_out_sparse_rows(
+        bound_flux = pp.matrix_operations.zero_rows(
             bound_flux, neumann_faces, diag=sgn
         )
 
