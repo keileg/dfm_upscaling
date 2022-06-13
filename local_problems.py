@@ -144,7 +144,7 @@ def _match_points_on_surface(
         )
 
         # Points on the line - although we call it a plane to be consistent with below
-        in_plane = np.where(np.sum(np.abs(cross), axis=0) < tol)[0]
+        in_plane = np.where(np.sum(np.abs(cross), axis=0) < 1e2 * tol)[0]
 
     else:
         # Here we will find the normal vector, and find points in the plane by a dot product
@@ -167,7 +167,9 @@ def _match_points_on_surface(
 
         # Index of points in the plane
         assert np.all(np.isfinite(n))
-        in_plane = np.where(np.abs(np.sum(vec_cp_p[:spatial_dim] * n, axis=0)) < tol)[0]
+        in_plane = np.where(
+            np.abs(np.sum(vec_cp_p[:spatial_dim] * n, axis=0)) < 1e2 * tol
+        )[0]
 
     # Restrict point cloud to the plane
     p_in_plane = p[:, in_plane]
@@ -230,6 +232,8 @@ def cell_basis_functions(
     ilu_map = {}
     ilu_threshold = 10000
 
+    use_tpfa = False  # reg.dim == 3 and len(reg.constraints) > 0
+
     # Loop over all grid buckets: first type of gb (line, surface, 3d)
     for gb_set in bucket_list:
         # Then all gbs of this type
@@ -239,7 +243,7 @@ def cell_basis_functions(
             # Also, it is now assumed that we use the same variable and parameter
             # keywords everywhere. This should be fixed
             discr.set_parameters_cell_basis(gb, macro_data)
-            discr.set_variables_discretizations_cell_basis(gb)
+            discr.set_variables_discretizations_cell_basis(gb, use_tpfa)
 
             # Create an Assembler and discretized the specified problem. The parameters
             # and type (not value) of boundary condition will be the same throughout the
@@ -249,9 +253,14 @@ def cell_basis_functions(
 
             A, _ = assembler.assemble_matrix_rhs(only_matrix=True)
             if A.shape[0] > ilu_threshold:
-                ilu = spla.spilu(A)
+                try:
+                    ilu = spla.spilu(A)
+                    Mx = lambda v: ilu.solve(v)
+                except RuntimeError:
+                    solve = spla.factorized(A)
+                    Mx = lambda v: solve(v)
+
                 print("ILU done")
-                Mx = lambda v: ilu.solve(v)
                 M = spla.LinearOperator(A.shape, Mx)
                 ilu_map[gb] = M
 
@@ -375,7 +384,7 @@ def cell_basis_functions(
                             loc_discr = d[pp.DISCRETIZATION][discr.cell_variable][
                                 discr.cell_discr
                             ]
-                            breakpoint()
+
                             # Rediscretize local problem, unless this is a 1d auxiliary line
                             # where a continuity condition has been imposed (this effectively
                             # will have no boundary condition). In the latter case, it would not
@@ -389,7 +398,7 @@ def cell_basis_functions(
                                 bc = d[pp.PARAMETERS][discr.keyword]["bc"]
                                 bc.is_dir[faces_found] = True
                                 bc.is_neu[faces_found] = False
-                                # breakpoint()
+
                                 # Reassemble on this gb, and update the assembler map
                                 assembler, _ = assembler_map[gb]
                                 A_new, _ = assembler.assemble_matrix_rhs(
@@ -506,12 +515,16 @@ def cell_basis_functions(
     if check_basis:
         basis_sum = np.sum(np.array([b for b in basis_functions.values()]), axis=0)
         for g, _ in assembler.gb:
-            dof = assembler._dof_manager.dof_ind(g, discr.cell_variable)
+            dof = assembler._dof_manager.grid_and_variable_to_dofs(
+                g, discr.cell_variable
+            )
             assert np.allclose(basis_sum[dof], 1, atol=1e-2)
 
         # Check that the mortar fluxes sum to zero for local problems.
         for e, _ in assembler.gb.edges():
-            dof = assembler._dof_manager.dof_ind(e, discr.mortar_variable)
+            dof = assembler._dof_manager.grid_and_variable_to_dofs(
+                e, discr.mortar_variable
+            )
             assert np.allclose(basis_sum[dof], 0, atol=1e-4)
 
     return (
@@ -629,7 +642,6 @@ def compute_transmissibilies(
             ]
 
     else:
-        # EK: 3d domains have not been tested.
         # Create all 2d grids that correspond to a domain boundary
         constraint_surfaces = msh_2_grid.create_2d_grids(
             pts,
@@ -1127,6 +1139,12 @@ def discretize_boundary_conditions(
                         else:
                             # Distribute the Neumann flux between micro faces according
                             # to their areas.
+                            # To get the area scaling correct between the dimension, the boundary
+                            # conditions are set as densities, that is, they are scaled with the
+                            # face areas in the respective dimensions. The boundary condition
+                            # will be given as a flux (not a flux density), and we therefore
+                            # divide by the area of the
+
                             # No sign corrections here: Neumann conditions for the (micro) fv
                             # discretizations are treated as positive for flux out of the domain,
                             # independent of the direction of the normal vector. Thus the macro
@@ -1225,5 +1243,4 @@ def discretize_boundary_conditions(
     trace_discr = discretize_pressure_trace_macro_bound(
         coarse_g, local_gb, discr, boundary_assemblers, boundary_basis_functions
     )
-
     return (col_ind, row_ind, trm), trace_discr
