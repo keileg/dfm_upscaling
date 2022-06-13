@@ -1534,7 +1534,7 @@ class LocalGridBucketSet:
                 # Flip the primary and secondary if necessary
                 face_face = face_face.transpose()
 
-            gb.add_edge(high_neigh.tolist(), face_cells=face_face)
+            gb.add_edge(high_neigh.tolist(), primary_secondary_map=face_face)
 
             # This is the way to make mortars between equi-dimensional grids.
             side_grid_map = {
