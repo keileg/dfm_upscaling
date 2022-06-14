@@ -10,7 +10,7 @@ import numpy as np
 import porepy as pp
 from collections import namedtuple
 from typing import List, Tuple, Dict, Union, Optional
-
+from scipy.spatial import distance_matrix
 
 import scipy.sparse as sps
 import scipy.sparse.linalg as spla
@@ -180,31 +180,44 @@ def _match_points_on_surface(
         p_in_plane = p_in_plane.reshape((-1, 1))
 
     # Intersection of coordinates
-    _, _, mapping = pp.utils.setmembership.unique_columns_tol(
-        np.hstack((sp, p_in_plane)), tol=tol
-    )
+#    _, _, mapping = pp.utils.setmembership.unique_columns_tol(
+#        np.hstack((sp, p_in_plane)), tol=tol
+#    )
+    
 
-    num_occ = np.bincount(mapping)
-    # Find coordinates repeated twice or more
-    matches = np.where(num_occ >= 2)[0]
+    # num_occ = np.bincount(mapping)
+    # # Find coordinates repeated twice or more
+    # matches = np.where(num_occ >= 2)[0]
 
-    pairs = []
-    # Loop over all matching pairs
-    for ind in np.unique(matches):
-        hit = np.where(mapping == ind)[0]
-        # Split faces in g_new will have coinciding cell centers. Disregard these.
-        if hit[0] >= num_surf_pts:
+    # pairs = []
+    # # Loop over all matching pairs
+    # for ind in np.unique(matches):
+    #     hit = np.where(mapping == ind)[0]
+    #     # Split faces in g_new will have coinciding cell centers. Disregard these.
+    #     if hit[0] >= num_surf_pts:
+    #         continue
+    #     # One of the matches should be on the previous grid
+    #     # If we get an error here, it is likely because two fractures cross at an
+    #     # auxiliary surface (at least this is the likely cause at the time of writing)
+    #     assert np.all(hit[1:] >= num_surf_pts)
+
+    #     # Store all the possible pairs that are matching at the interface
+    #     for h in hit[1:]:
+    #         pairs.append([hit[0], in_plane[h - num_surf_pts]])
+    
+    dist = distance_matrix(sp.T, p_in_plane.T)
+    
+    row, col = np.where(dist < tol)
+    pairs2 = []            
+    for r, c in zip(row, col):
+        if r >= num_surf_pts:
             continue
-        # One of the matches should be on the previous grid
-        # If we get an error here, it is likely because two fractures cross at an
-        # auxiliary surface (at least this is the likely cause at the time of writing)
-        assert np.all(hit[1:] >= num_surf_pts)
+        pairs2.append([r, in_plane[c]])
 
-        # Store all the possible pairs that are matching at the interface
-        for h in hit[1:]:
-            pairs.append([hit[0], in_plane[h - num_surf_pts]])
+#    for p, p2 in zip(pairs, pairs2):
+#        assert np.allclose(p, p2)
 
-    return pairs
+    return pairs2
 
 
 def cell_basis_functions(
