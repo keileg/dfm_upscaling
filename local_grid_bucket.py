@@ -11,6 +11,7 @@ import porepy as pp
 import meshio
 import networkx as nx
 from typing import Dict, List, Tuple
+from scipy.spatial import distance_matrix
 
 from porepy.utils.setmembership import unique_columns_tol
 from porepy.fracs import msh_2_grid
@@ -112,7 +113,7 @@ class LocalGridBucketSet:
         # Read mesh data and store it
         self.gmsh_data = simplex._read_gmsh_file(self.reg.file_name + ".msh")
         self._recover_line_gb(network)
-
+    
     def _construct_buckets_3d(self, data):
         mesh_args = data.get("mesh_args", None)
 
@@ -306,7 +307,7 @@ class LocalGridBucketSet:
 
         self._recover_line_gb(network)
         self._recover_surface_gb(network)
-
+    
     def _recover_line_gb(self, network):
         """We will use the following keys / items in network._decomposition:
 
@@ -662,7 +663,7 @@ class LocalGridBucketSet:
             self._tag_faces_macro_boundary(gb)
 
         self.line_gb = buckets_1d
-
+    
     def _recover_surface_gb(self, network):
 
         # Network decomposition
@@ -1271,32 +1272,14 @@ class LocalGridBucketSet:
             indices (list): Index of items in p2 that are also in p1.
 
         """
-
-        # Check that each of the input points are unique
-        for p in (p1, p2):
-            p_unique, _, _ = unique_columns_tol(p, self.tol)
-            if p_unique.shape[1] != p.shape[1]:
-                raise ValueError("Original point sets should be unique")
-
-        # Find a mapping to a common unique set
-        _, _, new_2_all = unique_columns_tol(np.hstack((p1, p2)), self.tol)
-
-        # indices in the mapping that occur more than once.
-        # To be precise, there should be exactly two occurences (since both p1 and p2
-        # are known to be unique).
-        doubles = np.where(np.bincount(new_2_all) > 1)[0]
-
-        # Data structure to store the target indices
-        indices = []
-
-        for ind in doubles:
-            # Find the occurences of this double index
-            hit = np.where(new_2_all == ind)[0]
-            # The target index is known to be the second one (since we know there is one
-            # occurence each in p1 and p2).
-            # Adjust for the size of p1.
-            indices.append(hit[1] - p1.shape[1])
-
+        # Use scipy distance computation.
+        dist = distance_matrix(p1.T, p2.T)
+        # The indices are the hits per column.
+        _, indices = np.where(dist < self.tol)
+        
+        if indices.size != np.unique(indices).size:
+            raise ValueError("More than one match for a point")
+   
         return indices
 
     def _tag_faces_macro_boundary(self, gb: pp.GridBucket) -> None:
